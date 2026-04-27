@@ -1,10 +1,26 @@
 {
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
-  "description": "Curate agent skills from GitHub or custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.1.1",
-  "publisher": "open-source",
+  "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
+  "version": "0.2.0",
+  "publisher": "KeskaLabsAB",
+  "icon": "media/icon.png",
+  "galleryBanner": {
+    "color": "#0F172A",
+    "theme": "dark"
+  },
+  "pricing": "Free",
+  "sponsor": {
+    "url": "https://github.com/sponsors/keska-labs"
+  },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keska-labs/enterprise-skills"
+  },
+  "bugs": {
+    "url": "https://github.com/keska-labs/enterprise-skills/issues"
+  },
   "keywords": [
     "cursor",
     "skills",
@@ -22,12 +38,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
-    "onView:skillSync.sidebarManager",
-    "onCommand:skillSync.manageSkills",
-    "onCommand:skillSync.focusSidebar",
-    "onCommand:skillSync.configureSource",
-    "onCommand:skillSync.syncNow"
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -71,8 +82,8 @@
     "keybindings": [
       {
         "command": "skillSync.focusSidebar",
-        "key": "ctrl+shift+s",
-        "mac": "cmd+shift+s"
+        "key": "ctrl+alt+s",
+        "mac": "cmd+alt+s"
       }
     ],
     "configuration": {
@@ -120,7 +131,10 @@
     "test": "jest --coverage",
     "test:extension": "npm run compile:tests && node ./dist-test/src/test/runExtensionTests.js",
     "test:watch": "jest --watch",
-    "prepublishOnly": "npm run clean && npm run lint && npm run test && npm run build"
+    "check:release": "npm run clean && npm run lint && npm run test && npm run build",
+    "vscode:prepublish": "npm run check:release",
+    "prepublishOnly": "npm run check:release",
+    "vsix": "npx vsce package"
   },
   "type": "commonjs",
   "dependencies": {
@@ -153,6 +167,7 @@
     "ts-loader": "^9.5.7",
     "typescript": "^6.0.3",
     "webpack": "^5.106.2",
-    "webpack-cli": "^7.0.2"
+    "webpack-cli": "^7.0.2",
+    "@vscode/vsce": "^3.6.0"
   }
 }

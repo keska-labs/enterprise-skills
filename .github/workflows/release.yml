@@ -6,6 +6,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
   package:
     runs-on: ubuntu-latest
@@ -22,14 +25,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build extension
-        run: npm run build
-
-      - name: Package VSIX
-        run: npx @vscode/vsce package
+      - name: Package VSIX (lint, test, production build, vsce pack)
+        run: npm run vsix
 
       - name: Upload VSIX artifact
         uses: actions/upload-artifact@v4
         with:
-          name: extension-vsix
+          name: agent-skill-sync-vsix
           path: "*.vsix"
+          if-no-files-found: error
+
+      - name: Attach VSIX to GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "*.vsix"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

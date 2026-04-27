@@ -68,8 +68,8 @@ export function EmptyState({ connectionHealth, detailMessage, onConnect }: Empty
       </div>
       <h2 className="empty-title">Connect a skill source</h2>
       <p className="empty-body">
-        Choose a GitHub repository that hosts <code>.cursor/rules</code> (or switch to a custom registry in settings).
-        Skills you enable are copied into this workspace for your agent.
+        Choose a GitHub repository—<strong>private repositories</strong> are supported with your sign-in—that hosts{" "}
+        <code>.cursor/rules</code>, or switch to a custom registry in settings. Skills you enable are copied into this workspace for your agent.
       </p>
       <button type="button" className="button cta-button" onClick={onConnect}>
         Connect source

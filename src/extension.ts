@@ -12,8 +12,14 @@ import { SkillCatalogStore } from "./services/SkillCatalogStore";
 
 let syncEngineRef: SyncEngine | undefined;
 let loggerRef: Logger | undefined;
+let activated = false;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  if (activated) {
+    return;
+  }
+  activated = true;
+
   const logger = new Logger("Agent Skill Sync");
   const authService = new AuthService();
   const configService = new ConfigService();
@@ -83,6 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
+  activated = false;
   syncEngineRef?.dispose();
   loggerRef?.dispose();
 }

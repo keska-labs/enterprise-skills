@@ -66,6 +66,20 @@ export async function configureSource(
   showSyncOutcome(syncResult, logger, "Initial sync");
 }
 
+function safeRegisterCommand(
+  context: vscode.ExtensionContext,
+  command: string,
+  callback: (...args: unknown[]) => unknown
+): void {
+  try {
+    const disposable = vscode.commands.registerCommand(command, callback);
+    context.subscriptions.push(disposable);
+  } catch {
+    // Command already registered by a previous (not yet deactivated) instance.
+    // The existing registration will continue to work; skip silently.
+  }
+}
+
 export function registerCommands(
   context: vscode.ExtensionContext,
   authService: AuthService,
@@ -74,36 +88,16 @@ export function registerCommands(
   syncEngine: SyncEngine,
   logger: Logger,
   focusSkillSidebar: () => void
-): vscode.Disposable[] {
-  const disposables: vscode.Disposable[] = [];
-
-  disposables.push(
-    vscode.commands.registerCommand("skillSync.manageSkills", () => {
-      focusSkillSidebar();
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand("skillSync.focusSidebar", () => {
-      focusSkillSidebar();
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand("skillSync.configureSource", async () => {
-      await configureSource(authService, configService, repoService, syncEngine, logger);
-    })
-  );
-
-  disposables.push(
-    vscode.commands.registerCommand("skillSync.syncNow", async () => {
-      const syncResult = await syncEngine.sync(true);
-      showSyncOutcome(syncResult, logger, "Sync");
-    })
-  );
-
-  context.subscriptions.push(...disposables);
-  return disposables;
+): void {
+  safeRegisterCommand(context, "skillSync.manageSkills", () => focusSkillSidebar());
+  safeRegisterCommand(context, "skillSync.focusSidebar", () => focusSkillSidebar());
+  safeRegisterCommand(context, "skillSync.configureSource", async () => {
+    await configureSource(authService, configService, repoService, syncEngine, logger);
+  });
+  safeRegisterCommand(context, "skillSync.syncNow", async () => {
+    const syncResult = await syncEngine.sync(true);
+    showSyncOutcome(syncResult, logger, "Sync");
+  });
 }
 
 function showSyncOutcome(result: SyncResult, logger: Logger, label: string): void {

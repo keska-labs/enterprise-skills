@@ -1,3 +1,4 @@
+# Source and tooling (webpack emits dist/* for runtime)
 src/**
 webview-ui/**
 node_modules/**
@@ -11,8 +12,21 @@ tsconfig.json
 webpack.config.js
 .eslintrc.cjs
 .github/**
+.vscode/**
+
+# Screenshot previews (Marketplace README only, not shipped in .vsix)
+media/preview-*.png
 
 # Local IDE / agent (never ship in .vsix)
 .cursor/**
 .agent/**
 *.plan.md
+
+# Secrets, artifacts, OS noise
+*.vsix
+.env
+.env.*
+*.log
+.DS_Store
+.tsbuildinfo
+.git/**
