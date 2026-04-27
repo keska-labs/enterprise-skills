@@ -76,6 +76,21 @@ npm run build
 
 Source lives under `src/` (extension host) and `webview-ui/` (React sidebar). The packaged extension loads `dist/extension.js` and `dist/webview.js`.
 
+### Task runner (optional)
+
+If you use [Task](https://taskfile.dev) (`task` on PATH — e.g. `brew install go-task/tap/go-task` on macOS), common flows are:
+
+| Command | What it runs |
+| --- | --- |
+| `task` | List all tasks |
+| `task deps` | `npm ci` |
+| `task check` | Clean + lint + test + production build |
+| `task vsix` | Full release gate + `vsce package` → `.vsix` in repo root |
+| `task verify-icon` | Pull `extension/media/icon.png` from the newest VSIX into `/tmp` |
+| `task install-vsix` | Install the newest `.vsix` via `cursor` or `code` CLI (run `task vsix` first) |
+
+Everything above is a thin wrapper around the same `npm` scripts in `package.json`.
+
 ### Packaging a `.vsix`
 
 ```bash

@@ -1,0 +1,78 @@
+# https://taskfile.dev — install: brew install go-task/tap/go-task (or see upstream docs)
+version: "3"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  deps:
+    desc: Install locked dependencies (npm ci)
+    cmds:
+      - npm ci
+
+  lint:
+    desc: ESLint on src and webview-ui
+    cmds:
+      - npm run lint
+
+  test:
+    desc: Jest unit tests with coverage
+    cmds:
+      - npm run test
+
+  build:
+    desc: Production webpack (extension + webview)
+    cmds:
+      - npm run build
+
+  clean:
+    desc: Remove dist, coverage, tsbuildinfo
+    cmds:
+      - npm run clean
+
+  check:
+    desc: Full release gate — clean, lint, test, production build
+    cmds:
+      - npm run check:release
+
+  vsix:
+    desc: Build Marketplace .vsix (same as npm run vsix)
+    cmds:
+      - npm run vsix
+
+  verify-icon:
+    desc: Extract media/icon.png from latest VSIX to /tmp for inspection
+    cmds:
+      - npm run verify:icon
+
+  watch:
+    desc: Webpack development watch
+    cmds:
+      - npm run watch
+
+  test-extension:
+    desc: Extension host integration tests (needs display on Linux CI)
+    cmds:
+      - npm run test:extension
+
+  install-vsix:
+    desc: Install newest agent-skill-sync-*.vsix (prefers cursor CLI, else code)
+    cmds:
+      - |
+        set -e
+        VSIX=$(ls -t agent-skill-sync-*.vsix 2>/dev/null | head -1 || true)
+        if [ -z "$VSIX" ]; then
+          echo "No agent-skill-sync-*.vsix in repo root. Run: task vsix"
+          exit 1
+        fi
+        echo "Installing: $VSIX"
+        if command -v cursor >/dev/null 2>&1; then
+          cursor --install-extension "$VSIX" --force
+        elif command -v code >/dev/null 2>&1; then
+          code --install-extension "$VSIX" --force
+        else
+          echo "Neither 'cursor' nor 'code' found in PATH."
+          exit 1
+        fi

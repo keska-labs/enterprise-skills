@@ -1,5 +1,6 @@
-# Dev scripts (not needed in the extension runtime)
+# Dev tooling (not shipped in .vsix)
 scripts/**
+Taskfile.yml
 
 # Source and tooling (webpack emits dist/* for runtime)
 src/**
