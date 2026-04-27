@@ -1,0 +1,18 @@
+node_modules
+dist
+dist-test
+coverage
+.vscode-test
+.tsbuildinfo
+.DS_Store
+*.vsix
+*.log
+.env
+.env.*
+
+# Cursor / local agent state (never publish)
+.cursor/
+
+# Local plan / scratch files
+*.plan.md
+.agent/

@@ -1,0 +1,77 @@
+import { SyncEngine } from "../services/SyncEngine";
+import { AuthService } from "../services/AuthService";
+import { ConfigService } from "../services/ConfigService";
+import { RepoService } from "../services/RepoService";
+import { RegistryService } from "../services/RegistryService";
+import { Logger } from "../utils/logger";
+import * as fileUtils from "../utils/fileUtils";
+import { ServiceError } from "../services/ServiceError";
+import { SkillCatalogStore } from "../services/SkillCatalogStore";
+
+describe("SyncEngine", () => {
+  it("syncs opted-in skills from GitHub source", async () => {
+    jest.spyOn(fileUtils, "writeSkillFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "deleteSkillFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
+
+    const auth = { getToken: jest.fn().mockResolvedValue("token") } as unknown as AuthService;
+    const config = {
+      getOptedInSkills: jest.fn().mockReturnValue(["skill-a"]),
+      getSourceMode: jest.fn().mockReturnValue("github-repo"),
+      getSourceRepository: jest.fn().mockReturnValue("owner/repo")
+    } as unknown as ConfigService;
+    const repo = {
+      listSkillsInRepo: jest.fn().mockResolvedValue([{ name: "skill-a", path: "skills/skill-a.mdc", shaOrVersion: "abc1234" }]),
+      getSkillContent: jest.fn().mockResolvedValue({ content: "body", shaOrVersion: "abc1234" }),
+      resolveSkillsRootPath: jest.fn().mockResolvedValue(".cursor/rules")
+    } as unknown as RepoService;
+    const registry = {} as RegistryService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const catalogStore = {
+      load: jest.fn().mockReturnValue(undefined),
+      save: jest.fn(),
+      merge: jest.fn(),
+      clear: jest.fn()
+    } as unknown as SkillCatalogStore;
+
+    const engine = new SyncEngine(auth, config, repo, registry, logger, catalogStore);
+    const result = await engine.sync(true);
+    expect(result.status).toBe("success");
+    expect(result.updated).toContain("skill-a");
+  });
+
+  it("returns skipped result when no session exists", async () => {
+    jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
+    const auth = { getToken: jest.fn().mockResolvedValue(undefined) } as unknown as AuthService;
+    const config = {
+      getOptedInSkills: jest.fn().mockReturnValue([]),
+      getSourceMode: jest.fn().mockReturnValue("github-repo"),
+      getSourceRepository: jest.fn().mockReturnValue("owner/repo")
+    } as unknown as ConfigService;
+    const repo = {} as RepoService;
+    const registry = {} as RegistryService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const catalogStore = {} as SkillCatalogStore;
+
+    const engine = new SyncEngine(auth, config, repo, registry, logger, catalogStore);
+    const result = await engine.sync(false);
+    expect(result.status).toBe("skipped");
+    expect(result.reason).toBe("no_session");
+  });
+
+  it("returns auth_expired for service auth errors", async () => {
+    const auth = {
+      getToken: jest.fn().mockRejectedValue(new ServiceError("auth_expired", "GitHub authorization expired."))
+    } as unknown as AuthService;
+    const config = {} as ConfigService;
+    const repo = {} as RepoService;
+    const registry = {} as RegistryService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const catalogStore = {} as SkillCatalogStore;
+
+    const engine = new SyncEngine(auth, config, repo, registry, logger, catalogStore);
+    const result = await engine.sync(true);
+    expect(result.status).toBe("failed");
+    expect(result.reason).toBe("auth_expired");
+  });
+});

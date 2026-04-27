@@ -1,0 +1,18 @@
+src/**
+webview-ui/**
+node_modules/**
+coverage/**
+.vscode-test/**
+dist-test/**
+**/*.map
+**/*.test.*
+jest.config.js
+tsconfig.json
+webpack.config.js
+.eslintrc.cjs
+.github/**
+
+# Local IDE / agent (never ship in .vsix)
+.cursor/**
+.agent/**
+*.plan.md
