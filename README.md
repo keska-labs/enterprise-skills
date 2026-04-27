@@ -85,6 +85,41 @@ npm run vsix          # lint → test → production build → vsce package
 
 Produces `agent-skill-sync-<version>.vsix` at the repo root (gitignored).
 
+### Verify the Marketplace icon **before** you upload
+
+The listing tile uses **`media/icon.png`** (must be **128×128**). The logo should **fill most of the square** at 100% zoom — not a tiny graphic in a corner.
+
+1. **Build the VSIX**
+
+   ```bash
+   npm run vsix
+   ```
+
+2. **Extract and inspect the exact bytes that ship** (same file the Marketplace will show)
+
+   ```bash
+   npm run verify:icon
+   ```
+
+   Then open **`/tmp/agent-skill-sync-icon-from-vsix.png`** in Preview (or any viewer) at **100%** zoom. Confirm the mark is large and sharp.
+
+   **Manual equivalent** (if you skip the script):
+
+   ```bash
+   unzip -p agent-skill-sync-0.2.1.vsix extension/media/icon.png > /tmp/icon-check.png
+   open /tmp/icon-check.png   # macOS
+   ```
+
+3. **Optional — see it like the Extensions view**
+
+   Install the VSIX locally, then open **Extensions → Agent Skill Sync** and check the icon in the detail header:
+
+   ```bash
+   code --install-extension agent-skill-sync-0.2.1.vsix
+   ```
+
+   Use a **new profile** or uninstall the previous version first so only one copy is active.
+
 ### Publishing to the Visual Studio Marketplace
 
 **Manual upload** (no PAT needed):

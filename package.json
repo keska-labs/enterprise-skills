@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -134,7 +134,8 @@
     "check:release": "npm run clean && npm run lint && npm run test && npm run build",
     "vscode:prepublish": "npm run check:release",
     "prepublishOnly": "npm run check:release",
-    "vsix": "npx vsce package"
+    "vsix": "npx vsce package",
+    "verify:icon": "bash scripts/verify-marketplace-icon.sh"
   },
   "type": "commonjs",
   "dependencies": {

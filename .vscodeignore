@@ -1,3 +1,6 @@
+# Dev scripts (not needed in the extension runtime)
+scripts/**
+
 # Source and tooling (webpack emits dist/* for runtime)
 src/**
 webview-ui/**
