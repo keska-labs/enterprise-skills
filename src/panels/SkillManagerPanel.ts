@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as crypto from "crypto";
 import { AuthService } from "../services/AuthService";
 import { ConfigService } from "../services/ConfigService";
 import { RepoService } from "../services/RepoService";
@@ -10,9 +9,11 @@ import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
 import {
+  buildAnalyticsSessionForPlacement,
   buildSkillManagerState,
   disconnectSource,
-  fallbackSkillManagerState
+  fallbackSkillManagerState,
+  resolveGa4ForWebview
 } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
@@ -20,6 +21,7 @@ import {
   handleGithubSearchCatalog
 } from "./skillManagerBrowse";
 import { ServiceError } from "../services/ServiceError";
+import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
 
 export class SkillManagerPanel {
   private static currentPanel: SkillManagerPanel | undefined;
@@ -28,6 +30,7 @@ export class SkillManagerPanel {
 
   public static render(
     extensionUri: vscode.Uri,
+    extensionVersion: string,
     authService: AuthService,
     configService: ConfigService,
     repoService: RepoService,
@@ -55,6 +58,7 @@ export class SkillManagerPanel {
     SkillManagerPanel.currentPanel = new SkillManagerPanel(
       panel,
       extensionUri,
+      extensionVersion,
       authService,
       configService,
       repoService,
@@ -69,6 +73,7 @@ export class SkillManagerPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
+    private readonly extensionVersion: string,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly repoService: RepoService,
@@ -93,31 +98,10 @@ export class SkillManagerPanel {
       });
     });
 
-    this.panel.webview.html = this.getHtmlForWebview(this.panel.webview);
+    this.panel.webview.html = getSkillManagerWebviewHtml(this.panel.webview, this.extensionUri);
     this.syncEngine.onSyncComplete(() => {
       void this.postState();
     });
-  }
-
-  private getHtmlForWebview(webview: vscode.Webview): string {
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));
-    const scriptUrl = `${scriptUri.toString()}?v=${Date.now()}`;
-    const nonce = crypto.randomBytes(16).toString("hex");
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Skill Manager</title>
-      </head>
-      <body>
-        <div id="root"></div>
-        <script nonce="${nonce}" src="${scriptUrl}"></script>
-      </body>
-      </html>
-    `;
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
@@ -208,6 +192,8 @@ export class SkillManagerPanel {
       this.panel.webview.postMessage({
         type: "setState",
         payload: fallbackSkillManagerState({
+          analyticsSession: buildAnalyticsSessionForPlacement("panel", this.extensionVersion),
+          ga4MeasurementId: resolveGa4ForWebview(this.configService),
           sourceRepository: this.configService.getSourceRepository(),
           sourceMode: this.configService.getSourceMode(),
           isConnected: false,
@@ -232,7 +218,9 @@ export class SkillManagerPanel {
       registryService: this.registryService,
       syncEngine: this.syncEngine,
       logger: this.logger,
-      catalogStore: this.catalogStore
+      catalogStore: this.catalogStore,
+      analyticsPlacement: "panel",
+      extensionVersion: this.extensionVersion
     });
   }
 }

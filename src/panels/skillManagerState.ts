@@ -3,11 +3,42 @@ import { ConfigService } from "../services/ConfigService";
 import { RegistryService } from "../services/RegistryService";
 import { SyncEngine } from "../services/SyncEngine";
 import { Logger } from "../utils/logger";
-import { deleteSkillFile, listExistingSkillFiles } from "../utils/fileUtils";
+import { deleteSkillFile, deleteSkillPackage, listExistingSkillFiles, listExistingSkillPackages } from "../utils/fileUtils";
 import { ServiceError } from "../services/ServiceError";
 import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
-import { CategoryData, SkillInfo, SkillManagerState } from "../../webview-ui/types/messages";
+import {
+  CategoryData,
+  SkillInfo,
+  SkillManagerAnalyticsSession,
+  SkillManagerState
+} from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
+
+export function resolveGa4MeasurementId(raw: string): string | null {
+  const trimmed = raw.trim();
+  return /^G-[A-Z0-9]+$/i.test(trimmed) ? trimmed.toUpperCase() : null;
+}
+
+let ga4ProductTelemetryBlockLogged = false;
+
+/**
+ * Resolves GA4 ID for the webview: valid `G-...` from settings, and unless
+ * `skillSync.ga4AllowWithoutProductTelemetry` is true, requires VS Code / Cursor
+ * product telemetry (`vscode.env.isTelemetryEnabled`).
+ */
+export function resolveGa4ForWebview(configService: ConfigService): string | null {
+  const id = resolveGa4MeasurementId(configService.getGa4MeasurementId());
+  if (!id) {
+    return null;
+  }
+  if (configService.getGa4AllowWithoutProductTelemetry()) {
+    return id;
+  }
+  if (!vscode.env.isTelemetryEnabled) {
+    return null;
+  }
+  return id;
+}
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
@@ -15,6 +46,27 @@ interface SkillManagerStateDependencies {
   syncEngine: SyncEngine;
   logger: Logger;
   catalogStore: SkillCatalogStore;
+  analyticsPlacement: "sidebar" | "panel";
+  extensionVersion: string;
+}
+
+export function buildAnalyticsSessionForPlacement(
+  placement: "sidebar" | "panel",
+  extensionVersion: string
+): SkillManagerAnalyticsSession {
+  return {
+    webviewHost: placement,
+    extensionVersion,
+    vscodeVersion: vscode.version,
+    appName: vscode.env.appName,
+    language: vscode.env.language,
+    platform: process.platform,
+    uiKind: vscode.env.uiKind === vscode.UIKind.Web ? "web" : "desktop"
+  };
+}
+
+function buildAnalyticsSession(deps: SkillManagerStateDependencies): SkillManagerAnalyticsSession {
+  return buildAnalyticsSessionForPlacement(deps.analyticsPlacement, deps.extensionVersion);
 }
 
 export async function buildSkillManagerState(deps: SkillManagerStateDependencies): Promise<SkillManagerState> {
@@ -86,14 +138,31 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
       name,
       description: meta?.description ?? "",
       version: meta?.version ?? (meta?.shaOrVersion ? meta.shaOrVersion.slice(0, 7) : ""),
-      category: meta?.category ?? "Enabled"
+      category: meta?.category ?? "Enabled",
+      skillType: meta?.skillType ?? "cursor-rule",
+      fileCount: meta?.skillFiles?.length
     };
   });
 
   const enabledCategories: CategoryData[] =
     enabledSkills.length > 0 ? [{ name: "Enabled", skills: enabledSkills }] : [];
 
+  const parsedGa4 = resolveGa4MeasurementId(configService.getGa4MeasurementId());
+  const ga4MeasurementId = resolveGa4ForWebview(configService);
+  if (parsedGa4 && !ga4MeasurementId && !ga4ProductTelemetryBlockLogged) {
+    ga4ProductTelemetryBlockLogged = true;
+    logger.warn(
+      "GA4: `skillSync.ga4MeasurementId` is set but the Skill Manager will not load analytics because " +
+        "product telemetry is off (vscode.env.isTelemetryEnabled). " +
+        "Either enable editor telemetry (**Telemetry: Telemetry Level** ≠ off), or set " +
+        "`skillSync.ga4AllowWithoutProductTelemetry` to true to use your GA4 property anyway. " +
+        "See **Output → Agent Skill Sync**."
+    );
+  }
+
   return {
+    analyticsSession: buildAnalyticsSession(deps),
+    ga4MeasurementId,
     sourceRepository,
     sourceMode,
     categories: sourceMode === "custom-registry" ? registryCategories : categories.map((name) => ({ name, skills: [] })),
@@ -114,7 +183,13 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
 }
 
 export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): SkillManagerState {
+  const { analyticsSession: partialSession, ...partialRest } = partial;
+  const placement = partialSession?.webviewHost ?? "sidebar";
+  const extensionVersion = partialSession?.extensionVersion ?? "0.0.0";
+  const defaultSession = buildAnalyticsSessionForPlacement(placement, extensionVersion);
+
   return {
+    ga4MeasurementId: null,
     sourceRepository: "",
     sourceMode: "github-repo",
     categories: [],
@@ -131,13 +206,14 @@ export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): 
     skillsRootPath: null,
     browseEntries: [],
     catalogSize: 0,
-    ...partial
+    ...partialRest,
+    analyticsSession: { ...defaultSession, ...(partialSession ?? {}) }
   };
 }
 
 export async function disconnectSource(configService: ConfigService, catalogStore: SkillCatalogStore): Promise<boolean> {
   const confirm = await vscode.window.showWarningMessage(
-    "Disconnecting will remove synced .cursor/rules files from this workspace.",
+    "Disconnecting will remove synced files from .cursor/rules and .cursor/skills in this workspace.",
     { modal: true },
     "Disconnect"
   );
@@ -155,14 +231,20 @@ export async function disconnectSource(configService: ConfigService, catalogStor
 
   await configService.setSourceRepository("");
   await configService.setOptedInSkills([]);
-  const existing = await listExistingSkillFiles();
-  await Promise.all(existing.map((skillName) => deleteSkillFile(skillName)));
+  const [existingFiles, existingPackages] = await Promise.all([
+    listExistingSkillFiles(),
+    listExistingSkillPackages()
+  ]);
+  await Promise.all([
+    ...existingFiles.map((skillName) => deleteSkillFile(skillName)),
+    ...existingPackages.map((pkgName) => deleteSkillPackage(pkgName))
+  ]);
   return true;
 }
 
 function categorizeSkills(
   initialCategories: CategoryData[],
-  skills: Array<{ name: string; description?: string; version?: string; category?: string; shaOrVersion: string }>
+  skills: Array<{ name: string; description?: string; version?: string; category?: string; shaOrVersion: string; skillType?: SkillMeta["skillType"]; skillFiles?: string[] }>
 ): CategoryData[] {
   const categoryMap = new Map(initialCategories.map((category) => [category.name, category.skills]));
   for (const skill of skills) {
@@ -174,7 +256,9 @@ function categorizeSkills(
       name: skill.name,
       description: skill.description ?? "",
       version: skill.version ?? skill.shaOrVersion.slice(0, 7),
-      category
+      category,
+      skillType: skill.skillType ?? "cursor-rule",
+      fileCount: skill.skillFiles?.length
     });
   }
   return [...categoryMap.entries()].map(([name, categorySkills]) => ({ name, skills: categorySkills }));

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { SkillInfo } from "../types/messages";
+import { IconCursorRule, IconSkillPkg } from "./icons";
 
 interface SkillRowProps {
   skill: SkillInfo;
@@ -11,13 +12,26 @@ export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.J
   const id = `skill-toggle-${skill.name.replace(/[^\w-]+/g, "-")}`;
   const [tipOpen, setTipOpen] = useState(false);
 
-  const hasInfo = Boolean(skill.version);
-  const tipContent = [skill.version ? `rev ${skill.version}` : null].filter(Boolean).join(" · ");
+  const isSkillPkg = skill.skillType === "skill";
+  const hasInfo = Boolean(skill.version || skill.fileCount);
+  const tipParts: string[] = [];
+  if (skill.version) {
+    tipParts.push(`rev ${skill.version}`);
+  }
+  if (isSkillPkg && skill.fileCount != null && skill.fileCount > 0) {
+    tipParts.push(`${skill.fileCount} file${skill.fileCount === 1 ? "" : "s"}`);
+  }
+  const tipContent = tipParts.join(" · ");
+
+  const typeLabel = isSkillPkg ? "Skill package" : "Cursor rule";
 
   return (
     <div className={`skill-row${isOptedIn ? " skill-row--active" : ""}`}>
       <label htmlFor={id} className="skill-info">
         <div className="skill-title-row">
+          <span className="skill-type-badge" aria-label={typeLabel} title={typeLabel}>
+            {isSkillPkg ? <IconSkillPkg /> : <IconCursorRule />}
+          </span>
           <span className="skill-title">{skill.name}</span>
           {hasInfo && (
             <span className="skill-info-anchor">

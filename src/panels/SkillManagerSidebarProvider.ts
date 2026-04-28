@@ -1,5 +1,4 @@
 import * as vscode from "vscode";
-import * as crypto from "crypto";
 import { AuthService } from "../services/AuthService";
 import { ConfigService } from "../services/ConfigService";
 import { RepoService } from "../services/RepoService";
@@ -10,9 +9,11 @@ import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
 import {
+  buildAnalyticsSessionForPlacement,
   buildSkillManagerState,
   disconnectSource,
-  fallbackSkillManagerState
+  fallbackSkillManagerState,
+  resolveGa4ForWebview
 } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
@@ -20,6 +21,7 @@ import {
   handleGithubSearchCatalog
 } from "./skillManagerBrowse";
 import { ServiceError } from "../services/ServiceError";
+import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
 
 export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "skillSync.sidebarManager";
@@ -27,6 +29,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
+    private readonly extensionVersion: string,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly repoService: RepoService,
@@ -51,7 +54,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       enableScripts: true,
       localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, "dist")]
     };
-    webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
+    webviewView.webview.html = getSkillManagerWebviewHtml(webviewView.webview, this.extensionUri);
 
     webviewView.webview.onDidReceiveMessage((message: WebviewMessage) => {
       this.handleMessage(message).catch((error: unknown) => {
@@ -66,27 +69,6 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         void this.postState();
       }
     });
-  }
-
-  private getHtmlForWebview(webview: vscode.Webview): string {
-    const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, "dist", "webview.js"));
-    const scriptUrl = `${scriptUri.toString()}?v=${Date.now()}`;
-    const nonce = crypto.randomBytes(16).toString("hex");
-    return `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Skill Manager</title>
-      </head>
-      <body>
-        <div id="root"></div>
-        <script nonce="${nonce}" src="${scriptUrl}"></script>
-      </body>
-      </html>
-    `;
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
@@ -171,6 +153,8 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       this.view?.webview.postMessage({
         type: "setState",
         payload: fallbackSkillManagerState({
+          analyticsSession: buildAnalyticsSessionForPlacement("sidebar", this.extensionVersion),
+          ga4MeasurementId: resolveGa4ForWebview(this.configService),
           sourceRepository: this.configService.getSourceRepository(),
           sourceMode: this.configService.getSourceMode(),
           isConnected: false,
@@ -195,7 +179,9 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       registryService: this.registryService,
       syncEngine: this.syncEngine,
       logger: this.logger,
-      catalogStore: this.catalogStore
+      catalogStore: this.catalogStore,
+      analyticsPlacement: "sidebar",
+      extensionVersion: this.extensionVersion
     });
   }
 }

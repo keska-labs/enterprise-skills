@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import { AuthService } from "./AuthService";
-import { RepoInfo, SkillContent, SkillMeta } from "../types";
+import { RepoInfo, SkillContent, SkillMeta, SkillType } from "../types";
 import { ServiceError, toServiceError } from "./ServiceError";
 
 interface GitHubRepoResponse {
@@ -41,6 +41,72 @@ interface GitHubTreeResponse {
   truncated?: boolean;
   tree: GitHubTreeItem[];
 }
+
+/** Parsed fields from a SKILL.md YAML frontmatter block. */
+interface SkillManifest {
+  name?: string;
+  description?: string;
+  /** Arbitrary key-value map from the `metadata:` block. */
+  metadata?: Record<string, string>;
+}
+
+/**
+ * Parse the YAML frontmatter from a SKILL.md file.
+ * Handles the subset of YAML used by the Agent Skills spec:
+ *   - Top-level scalar fields (name, description, license, compatibility, …)
+ *   - A nested `metadata:` mapping with string values (version, category, author, …)
+ * Does NOT require a YAML library; the spec keeps frontmatter deliberately simple.
+ */
+function parseSkillMdFrontmatter(content: string): SkillManifest {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) {
+    return {};
+  }
+  const lines = match[1].split(/\r?\n/);
+  const result: SkillManifest = {};
+  let inMetadata = false;
+  const meta: Record<string, string> = {};
+
+  for (const line of lines) {
+    // Blank lines are ok
+    if (!line.trim()) {
+      continue;
+    }
+    // Start of the `metadata:` block
+    if (/^metadata:\s*$/.test(line)) {
+      inMetadata = true;
+      continue;
+    }
+    // Indented key under `metadata:`
+    if (inMetadata && /^\s{2}/.test(line)) {
+      const m = line.match(/^\s{2}([\w-]+):\s*"?([^"]*)"?\s*$/);
+      if (m) {
+        meta[m[1]] = m[2].trim();
+      }
+      continue;
+    }
+    // Any non-indented line ends the metadata block
+    inMetadata = false;
+    // Top-level scalar: `key: value`
+    const top = line.match(/^([\w-]+):\s*(.+)$/);
+    if (top) {
+      const key = top[1];
+      const value = top[2].replace(/^["']|["']$/g, "").trim();
+      if (key === "name") {
+        result.name = value;
+      } else if (key === "description") {
+        result.description = value;
+      }
+    }
+  }
+
+  if (Object.keys(meta).length > 0) {
+    result.metadata = meta;
+  }
+  return result;
+}
+
+const CONCURRENT_MANIFEST_FETCHES = 5;
 
 export class RepoService {
   private readonly client: AxiosInstance;
@@ -129,8 +195,12 @@ export class RepoService {
   ): Promise<Array<{ name: string; path: string; type: "file" | "dir"; sha: string }>> {
     try {
       const headers = await this.getAuthHeaders();
+      const encodedPath = encodeRepoPath(dirPath);
+      const contentsUrl = encodedPath
+        ? `/repos/${owner}/${repo}/contents/${encodedPath}`
+        : `/repos/${owner}/${repo}/contents`;
       const response = await this.client.get<unknown>(
-        `/repos/${owner}/${repo}/contents/${encodeRepoPath(dirPath)}`,
+        contentsUrl,
         { headers }
       );
       if (!Array.isArray(response.data)) {
@@ -149,14 +219,24 @@ export class RepoService {
     }
   }
 
-  public buildSkillMeta(skillsRoot: string, filePath: string, sha: string): SkillMeta {
+  /**
+   * Build a SkillMeta from a known path and sha. Used by browse handlers.
+   * For directory entries (skill packages) caller should pass `skillType: "skill"`.
+   */
+  public buildSkillMeta(
+    skillsRoot: string,
+    filePath: string,
+    sha: string,
+    skillType: SkillType = "cursor-rule"
+  ): SkillMeta {
     const root = skillsRoot.replace(/^\/+|\/+$/g, "");
     return {
       name: this.deriveSkillName(root, filePath),
       path: filePath,
       shaOrVersion: sha,
       version: sha.slice(0, 7),
-      category: this.deriveCategory(root, filePath)
+      category: this.deriveCategory(root, filePath),
+      skillType
     };
   }
 
@@ -241,41 +321,137 @@ export class RepoService {
     }
 
     const normalizedRoot = rootPath.replace(/^\/+|\/+$/g, "");
-    const prefix = `${normalizedRoot}/`;
 
-    const metas: SkillMeta[] = [];
+    // First pass: identify skill packages (directories that contain a SKILL.md file).
+    // SKILL.md is the canonical marker defined by the agentskills.io open standard.
+    const skillPackageDirs = new Set<string>();
+    const skillManifests: Array<{ dirPath: string; sha: string }> = [];
+
     for (const item of tree.data.tree) {
       if (item.type !== "blob") {
         continue;
       }
-
-      if (!item.path.startsWith(prefix) && item.path !== normalizedRoot) {
+      if (!isUnderRoot(item.path, normalizedRoot)) {
         continue;
       }
-
-      const fileName = item.path.split("/").pop() ?? item.path;
-      if (!/\.(md|mdc|yaml|yml)$/i.test(fileName)) {
-        continue;
-      }
-
-      metas.push({
-        name: this.deriveSkillName(normalizedRoot, item.path),
-        path: item.path,
-        shaOrVersion: item.sha,
-        version: item.sha.slice(0, 7),
-        category: this.deriveCategory(normalizedRoot, item.path)
-      });
-
-      if (metas.length > RepoService.MAX_SKILL_FILES) {
-        throw new ServiceError(
-          "source_invalid",
-          `Too many skill files under ${normalizedRoot} (>${RepoService.MAX_SKILL_FILES}).`
-        );
+      const fileName = item.path.split("/").pop() ?? "";
+      if (fileName === "SKILL.md") {
+        const dirPath = item.path.slice(0, -"/SKILL.md".length);
+        skillPackageDirs.add(dirPath);
+        skillManifests.push({ dirPath, sha: item.sha });
       }
     }
 
+    // Second pass: collect cursor-rules and file membership for skill packages
+    const cursorRuleMetas: SkillMeta[] = [];
+    const skillPackageFiles = new Map<string, string[]>();
+    for (const dir of skillPackageDirs) {
+      skillPackageFiles.set(dir, []);
+    }
+
+    let totalItems = 0;
+    for (const item of tree.data.tree) {
+      if (item.type !== "blob") {
+        continue;
+      }
+      if (!isUnderRoot(item.path, normalizedRoot)) {
+        continue;
+      }
+
+      totalItems++;
+      if (totalItems > RepoService.MAX_SKILL_FILES) {
+        const boundedScope = normalizedRoot || "repository root";
+        throw new ServiceError(
+          "source_invalid",
+          `Too many files under ${boundedScope} (>${RepoService.MAX_SKILL_FILES}).`
+        );
+      }
+
+      // Check if inside a skill package
+      const parentSkillDir = findParentSkillDir(item.path, skillPackageDirs);
+      if (parentSkillDir) {
+        skillPackageFiles.get(parentSkillDir)?.push(item.path);
+        continue;
+      }
+
+      // Only treat standalone files with known extensions as cursor-rules
+      const fileName = item.path.split("/").pop() ?? "";
+      if (/\.(md|mdc|yaml|yml)$/i.test(fileName)) {
+        cursorRuleMetas.push({
+          name: this.deriveSkillName(normalizedRoot, item.path),
+          path: item.path,
+          shaOrVersion: item.sha,
+          version: item.sha.slice(0, 7),
+          category: this.deriveCategory(normalizedRoot, item.path),
+          skillType: "cursor-rule"
+        });
+      }
+    }
+
+    // Fetch skill.json manifests in parallel for descriptions/metadata
+    const skillPackageMetas = await this.fetchSkillManifests(
+      owner,
+      repo,
+      skillManifests,
+      skillPackageFiles,
+      normalizedRoot,
+      headers
+    );
+
+    const metas = [...cursorRuleMetas, ...skillPackageMetas];
     metas.sort((a, b) => a.name.localeCompare(b.name));
     return metas;
+  }
+
+  private async fetchSkillManifests(
+    owner: string,
+    repo: string,
+    manifests: Array<{ dirPath: string; sha: string }>,
+    packageFiles: Map<string, string[]>,
+    normalizedRoot: string,
+    headers: Record<string, string>
+  ): Promise<SkillMeta[]> {
+    const results: SkillMeta[] = [];
+
+    for (let i = 0; i < manifests.length; i += CONCURRENT_MANIFEST_FETCHES) {
+      const batch = manifests.slice(i, i + CONCURRENT_MANIFEST_FETCHES);
+      const batchResults = await Promise.all(
+        batch.map(async ({ dirPath, sha }) => {
+          let parsed: SkillManifest = {};
+          try {
+            const blobRes = await this.client.get<{ content: string; encoding: string }>(
+              `/repos/${owner}/${repo}/git/blobs/${sha}`,
+              { headers }
+            );
+            const raw = Buffer.from(blobRes.data.content, "base64").toString("utf8");
+            parsed = parseSkillMdFrontmatter(raw);
+          } catch {
+            // Fall back to path-derived metadata silently
+          }
+
+          const files = packageFiles.get(dirPath) ?? [];
+          // Per the spec, name must equal the directory name — prefer frontmatter name
+          // but fall back to the path-derived name if the manifest is missing or invalid.
+          const derivedName = this.deriveSkillName(normalizedRoot, dirPath);
+          const name = parsed.name ?? derivedName;
+          const version = parsed.metadata?.["version"] ?? sha.slice(0, 7);
+          const category = parsed.metadata?.["category"] ?? this.deriveCategory(normalizedRoot, dirPath);
+          return {
+            name,
+            description: parsed.description ?? undefined,
+            version,
+            category,
+            path: dirPath,
+            shaOrVersion: sha,
+            skillType: "skill" as const,
+            skillFiles: files
+          };
+        })
+      );
+      results.push(...batchResults);
+    }
+
+    return results;
   }
 
   private async resolveSkillsPath(
@@ -283,7 +459,9 @@ export class RepoService {
     repo: string,
     headers: Record<string, string>
   ): Promise<string> {
-    const candidates = [".cursor/rules", "skills", ".skills"];
+    // Prefer repo root first to support dedicated skill repositories that
+    // intentionally keep SKILL.md packages or rule files at top-level.
+    const candidates = ["", "skills", ".skills", "rules", ".cursor/rules"];
 
     for (const path of candidates) {
       const resolved = await this.trySkillsDirectory(owner, repo, path, headers);
@@ -294,7 +472,7 @@ export class RepoService {
 
     throw new ServiceError(
       "source_invalid",
-      `No skills directory found in ${owner}/${repo}. Expected one of: .cursor/rules, skills, .skills`
+      `No skills directory found in ${owner}/${repo}. Expected repository root or one of: skills, .skills, rules, .cursor/rules`
     );
   }
 
@@ -305,9 +483,21 @@ export class RepoService {
     headers: Record<string, string>
   ): Promise<string | null> {
     try {
-      const response = await this.client.get<unknown>(`/repos/${owner}/${repo}/contents/${encodeRepoPath(path)}`, { headers });
+      const encodedPath = encodeRepoPath(path);
+      const contentsUrl = encodedPath
+        ? `/repos/${owner}/${repo}/contents/${encodedPath}`
+        : `/repos/${owner}/${repo}/contents`;
+      const response = await this.client.get<unknown>(contentsUrl, { headers });
       if (!Array.isArray(response.data)) {
         return null;
+      }
+
+      if (!path) {
+        // Root is valid only if it has clear skill markers.
+        const entries = response.data as GitHubContentResponse[];
+        if (!looksLikeSkillsRoot(entries)) {
+          return null;
+        }
       }
 
       return path;
@@ -321,12 +511,34 @@ export class RepoService {
   }
 }
 
+function findParentSkillDir(filePath: string, skillDirs: Set<string>): string | null {
+  for (const dir of skillDirs) {
+    if (filePath.startsWith(`${dir}/`)) {
+      return dir;
+    }
+  }
+  return null;
+}
+
 function encodeRepoPath(repoPath: string): string {
   return repoPath
     .split("/")
     .filter((segment) => segment.length > 0)
     .map((segment) => encodeURIComponent(segment))
     .join("/");
+}
+
+function isUnderRoot(filePath: string, normalizedRoot: string): boolean {
+  if (!normalizedRoot) {
+    return true;
+  }
+  return filePath === normalizedRoot || filePath.startsWith(`${normalizedRoot}/`);
+}
+
+function looksLikeSkillsRoot(entries: GitHubContentResponse[]): boolean {
+  const hasSkillPackageDir = entries.some((entry) => entry.type === "dir" && /^[a-z0-9._-]+$/i.test(entry.name));
+  const hasRuleFile = entries.some((entry) => entry.type === "file" && /\.(md|mdc|yaml|yml)$/i.test(entry.name));
+  return hasSkillPackageDir || hasRuleFile;
 }
 
 function relativePathFromRoot(root: string, filePath: string): string {

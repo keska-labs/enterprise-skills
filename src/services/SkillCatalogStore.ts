@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { SkillMeta } from "../types";
 
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 3; // bumped: skill packages now use SKILL.md (agentskills.io spec)
 
 interface StoredCatalogPayload {
   v: typeof STORAGE_VERSION;

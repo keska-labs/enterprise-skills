@@ -64,7 +64,8 @@ export class RegistryService {
         version: skill.version,
         category: skill.category ?? "Uncategorized",
         shaOrVersion: skill.version,
-        path: skill.id
+        path: skill.id,
+        skillType: "cursor-rule" as const  // registry skills are single-file rules
       }));
     } catch (error) {
       throw toServiceError(error, "Failed to load skills from the custom registry.");

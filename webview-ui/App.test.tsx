@@ -16,6 +16,16 @@ jest.mock("./hooks/useVsCodeApi", () => ({
 
 function skillManagerPayload(overrides: Partial<SkillManagerState>): SkillManagerState {
   return {
+    analyticsSession: {
+      webviewHost: "sidebar",
+      extensionVersion: "0.0.0-test",
+      vscodeVersion: "0.0.0",
+      appName: "Test",
+      language: "en",
+      platform: "darwin",
+      uiKind: "desktop"
+    },
+    ga4MeasurementId: null,
     isConnected: false,
     connectionHealth: "unknown",
     categories: [],
@@ -32,6 +42,17 @@ function skillManagerPayload(overrides: Partial<SkillManagerState>): SkillManage
     skillsRootPath: null,
     browseEntries: [],
     catalogSize: 0,
+    ...overrides
+  };
+}
+
+export function makeSkillInfo(overrides: Partial<import("./types/messages").SkillInfo> = {}): import("./types/messages").SkillInfo {
+  return {
+    name: "test-skill",
+    description: "",
+    version: "abc1234",
+    category: "Test",
+    skillType: "cursor-rule",
     ...overrides
   };
 }

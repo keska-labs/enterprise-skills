@@ -41,4 +41,17 @@ export class ConfigService {
   public async setOptedInSkills(skills: string[]): Promise<void> {
     await this.config.update("optedInSkills", skills, vscode.ConfigurationTarget.Workspace);
   }
+
+  /** GA4 Measurement ID (`G-XXXXXXXX`) or empty to disable webview analytics. */
+  public getGa4MeasurementId(): string {
+    return this.config.get<string>("ga4MeasurementId", "").trim();
+  }
+
+  /**
+   * When true, GA4 may load with only a valid Measurement ID, without requiring
+   * `vscode.env.isTelemetryEnabled`.
+   */
+  public getGa4AllowWithoutProductTelemetry(): boolean {
+    return Boolean(this.config.get<boolean>("ga4AllowWithoutProductTelemetry", false));
+  }
 }

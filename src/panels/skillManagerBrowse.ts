@@ -28,14 +28,42 @@ function toBrowseEntries(
   return entries.map((e) => ({ name: e.name, path: e.path, type: e.type }));
 }
 
+/**
+ * Build SkillMeta from a directory listing, distinguishing skill packages
+ * (directories that contain a SKILL.md — agentskills.io standard) from
+ * cursor-rules (standalone .md/.mdc/.yaml/.yml files).
+ * At browse time we only have directory entries, not file contents, so
+ * directories are optimistically tagged as "skill"; the full git-tree scan
+ * in RepoService confirms the type by detecting the SKILL.md file.
+ */
 function skillFileMetas(
   repoService: RepoService,
   skillsRoot: string,
   entries: Array<{ name: string; path: string; type: "file" | "dir"; sha: string }>
 ): SkillMeta[] {
-  return entries
-    .filter((e) => e.type === "file" && SKILL_FILE.test(e.name))
-    .map((e) => repoService.buildSkillMeta(skillsRoot, e.path, e.sha));
+  const metas: SkillMeta[] = [];
+
+  for (const e of entries) {
+    if (e.type === "dir") {
+      // Directories visible in browse are potential skill packages
+      metas.push(repoService.buildSkillMeta(skillsRoot, e.path, e.sha, "skill"));
+    } else if (SKILL_FILE.test(e.name)) {
+      metas.push(repoService.buildSkillMeta(skillsRoot, e.path, e.sha, "cursor-rule"));
+    }
+  }
+
+  return metas;
+}
+
+function metaToSkillInfo(m: SkillMeta): SkillInfo {
+  return {
+    name: m.name,
+    description: m.description ?? "",
+    version: m.version ?? m.shaOrVersion.slice(0, 7),
+    category: m.category ?? "Uncategorized",
+    skillType: m.skillType,
+    fileCount: m.skillFiles?.length
+  };
 }
 
 export async function handleGithubLoadBrowseRoot(
@@ -115,13 +143,9 @@ export async function handleGithubSearchCatalog(
     .filter(
       (s) =>
         s.name.toLowerCase().includes(q) ||
-        (s.description ?? "").toLowerCase().includes(q)
+        (s.description ?? "").toLowerCase().includes(q) ||
+        (s.category ?? "").toLowerCase().includes(q)
     )
-    .map((s) => ({
-      name: s.name,
-      description: s.description ?? "",
-      version: s.version ?? s.shaOrVersion.slice(0, 7),
-      category: s.category ?? "Uncategorized"
-    }));
+    .map(metaToSkillInfo);
   postMessage({ type: "catalogSearchResults", query: qTrim, skills });
 }
