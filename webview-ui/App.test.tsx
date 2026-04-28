@@ -16,16 +16,6 @@ jest.mock("./hooks/useVsCodeApi", () => ({
 
 function skillManagerPayload(overrides: Partial<SkillManagerState>): SkillManagerState {
   return {
-    analyticsSession: {
-      webviewHost: "sidebar",
-      extensionVersion: "0.0.0-test",
-      vscodeVersion: "0.0.0",
-      appName: "Test",
-      language: "en",
-      platform: "darwin",
-      uiKind: "desktop"
-    },
-    ga4MeasurementId: null,
     isConnected: false,
     connectionHealth: "unknown",
     categories: [],

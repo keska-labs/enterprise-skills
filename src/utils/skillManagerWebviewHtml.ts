@@ -3,7 +3,6 @@ import * as vscode from "vscode";
 
 /**
  * Shared HTML + CSP for Skill Manager webviews (sidebar + panel).
- * CSP allows loading GA4 gtag from Google Tag Manager when enabled in settings.
  */
 export function getSkillManagerWebviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const nonce = crypto.randomBytes(16).toString("hex");
@@ -13,25 +12,7 @@ export function getSkillManagerWebviewHtml(webview: vscode.Webview, extensionUri
     "default-src 'none'",
     `style-src ${webview.cspSource} 'unsafe-inline'`,
     `font-src ${webview.cspSource}`,
-    `script-src 'nonce-${nonce}' https://www.googletagmanager.com`,
-    [
-      "connect-src",
-      "https://www.google-analytics.com",
-      "https://*.google-analytics.com",
-      "https://region1.google-analytics.com",
-      "https://www.googletagmanager.com",
-      "https://*.googletagmanager.com",
-      "https://*.analytics.google.com",
-      "https://stats.g.doubleclick.net",
-      "https://www.google.com"
-    ].join(" "),
-    [
-      "img-src",
-      "https://www.google-analytics.com",
-      "https://www.googletagmanager.com",
-      "https://*.google-analytics.com",
-      "data:"
-    ].join(" ")
+    `script-src 'nonce-${nonce}'`
   ].join("; ");
 
   return `<!DOCTYPE html>

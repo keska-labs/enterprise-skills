@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -117,16 +117,6 @@
         "skillSync.optedInSkills": {
           "type": "array",
           "default": []
-        },
-        "skillSync.ga4MeasurementId": {
-          "type": "string",
-          "default": "",
-          "markdownDescription": "Optional **Google Analytics 4** Measurement ID for the Skill Manager webview only (format `G-XXXXXXXXXX`). Empty = disabled. Prefer **User** settings for a stable ID across workspaces. [Google Privacy Policy](https://policies.google.com/privacy)"
-        },
-        "skillSync.ga4AllowWithoutProductTelemetry": {
-          "type": "boolean",
-          "default": false,
-          "markdownDescription": "When **true**, your GA4 script loads if `skillSync.ga4MeasurementId` is set **even when** VS Code / Cursor product telemetry is off (`Telemetry: Telemetry Level` = off or `vscode.env.isTelemetryEnabled` is false). Use this if you want your own analytics while keeping editor telemetry disabled. Default **false**: GA4 follows product telemetry (recommended for alignment with editor privacy)."
         }
       }
     }

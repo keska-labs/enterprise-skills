@@ -8,13 +8,7 @@ import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
-import {
-  buildAnalyticsSessionForPlacement,
-  buildSkillManagerState,
-  disconnectSource,
-  fallbackSkillManagerState,
-  resolveGa4ForWebview
-} from "./skillManagerState";
+import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
   handleGithubLoadBrowseRoot,
@@ -29,7 +23,6 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
-    private readonly extensionVersion: string,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly repoService: RepoService,
@@ -153,8 +146,6 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       this.view?.webview.postMessage({
         type: "setState",
         payload: fallbackSkillManagerState({
-          analyticsSession: buildAnalyticsSessionForPlacement("sidebar", this.extensionVersion),
-          ga4MeasurementId: resolveGa4ForWebview(this.configService),
           sourceRepository: this.configService.getSourceRepository(),
           sourceMode: this.configService.getSourceMode(),
           isConnected: false,
@@ -179,9 +170,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       registryService: this.registryService,
       syncEngine: this.syncEngine,
       logger: this.logger,
-      catalogStore: this.catalogStore,
-      analyticsPlacement: "sidebar",
-      extensionVersion: this.extensionVersion
+      catalogStore: this.catalogStore
     });
   }
 }

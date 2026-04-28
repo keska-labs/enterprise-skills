@@ -99,29 +99,12 @@ To change it: open **Keyboard Shortcuts** (`Ctrl+K Ctrl+S` / `Cmd+K Cmd+S`), sea
 | `skillSync.registryUrl` | Base URL for a custom registry |
 | `skillSync.categories` | Category names for the registry |
 | `skillSync.optedInSkills` | Skill names currently enabled for sync |
-| `skillSync.ga4MeasurementId` | Optional GA4 ID (`G-XXXXXXXXXX`) — loads analytics **only inside the Skill Manager webview**. Empty (default) = disabled. Prefer **User** settings if you want it everywhere. |
-| `skillSync.ga4AllowWithoutProductTelemetry` | Default `false`. Set **`true`** if your Measurement ID is set but GA still does not load because editor product telemetry is off (common in Cursor). See Privacy below. |
 
 ---
 
 ## Privacy
 
-GitHub API calls use your signed-in session token. Skill content is fetched only for skills you enable and written under `.cursor/rules` in the current workspace. Nothing leaves VS Code without an explicit sync. See [GitHub's terms](https://docs.github.com/en/site-policy) for API use.
-
-**Optional Google Analytics:** if you set `skillSync.ga4MeasurementId` to a valid **GA4** Measurement ID, the Skill Manager webview can load Google Tag Manager / Analytics and send anonymized usage events (tabs, sync outcomes, browse depth, catalog search length buckets, enabled-tab filter buckets, counts, host app, extension version, and similar metadata). Your **repository name**, **paths**, **skill names**, and **search text** are **not** sent as GA parameters. See [Google’s Privacy Policy](https://policies.google.com/privacy).
-
-By default, GA4 also requires [VS Code / Cursor product telemetry](https://code.visualstudio.com/docs/supporting/faq#_how-to-disable-telemetry-reporting) to be enabled (`vscode.env.isTelemetryEnabled`). Many users run with telemetry off; in that case GA will **not** load until you either turn telemetry on or set **`skillSync.ga4AllowWithoutProductTelemetry": true`** so only your Measurement ID gates loading. If your ID is ignored, open **Output** and select **Agent Skill Sync** — the extension logs a one-time warning when a valid `G-...` is set but blocked by product telemetry.
-
-**Your GA4 setup** — in **Settings → Open User Settings (JSON)** add:
-
-```json
-"skillSync.ga4MeasurementId": "G-XXXXXXXXXX",
-"skillSync.ga4AllowWithoutProductTelemetry": true
-```
-
-Omit `ga4AllowWithoutProductTelemetry` (or set `false`) if you want GA to follow editor telemetry only. Replace the Measurement ID with yours from [Google Analytics](https://analytics.google.com/) (Admin → Data streams → Web stream → Measurement ID).
-
-**Troubleshooting:** open the Skill Manager, then **Developer: Open Webview Developer Tools** on that view. In the **Console**, a failed gtag load prints a hint; in **Network**, look for `gtag/js` and `collect` requests. Ad blockers and strict privacy tools can block Google domains inside the webview.
+GitHub API calls use your signed-in session token. Skill content is fetched only for skills you enable and written under `.cursor/rules` and `.cursor/skills` in the current workspace. Nothing leaves the editor without an explicit sync. See [GitHub's terms](https://docs.github.com/en/site-policy) for API use.
 
 ---
 
@@ -181,7 +164,7 @@ The listing tile uses **`media/icon.png`** (must be **128×128**). The logo shou
    **Manual equivalent** (if you skip the script):
 
    ```bash
-   unzip -p agent-skill-sync-0.3.0.vsix extension/media/icon.png > /tmp/icon-check.png
+   unzip -p agent-skill-sync-0.3.1.vsix extension/media/icon.png > /tmp/icon-check.png
    open /tmp/icon-check.png   # macOS
    ```
 
@@ -190,7 +173,7 @@ The listing tile uses **`media/icon.png`** (must be **128×128**). The logo shou
    Install the VSIX locally, then open **Extensions → Agent Skill Sync** and check the icon in the detail header:
 
    ```bash
-   code --install-extension agent-skill-sync-0.3.0.vsix
+   code --install-extension agent-skill-sync-0.3.1.vsix
    ```
 
    Use a **new profile** or uninstall the previous version first so only one copy is active.

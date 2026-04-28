@@ -8,13 +8,7 @@ import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
-import {
-  buildAnalyticsSessionForPlacement,
-  buildSkillManagerState,
-  disconnectSource,
-  fallbackSkillManagerState,
-  resolveGa4ForWebview
-} from "./skillManagerState";
+import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
   handleGithubLoadBrowseRoot,
@@ -30,7 +24,6 @@ export class SkillManagerPanel {
 
   public static render(
     extensionUri: vscode.Uri,
-    extensionVersion: string,
     authService: AuthService,
     configService: ConfigService,
     repoService: RepoService,
@@ -58,7 +51,6 @@ export class SkillManagerPanel {
     SkillManagerPanel.currentPanel = new SkillManagerPanel(
       panel,
       extensionUri,
-      extensionVersion,
       authService,
       configService,
       repoService,
@@ -73,7 +65,6 @@ export class SkillManagerPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     extensionUri: vscode.Uri,
-    private readonly extensionVersion: string,
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly repoService: RepoService,
@@ -192,8 +183,6 @@ export class SkillManagerPanel {
       this.panel.webview.postMessage({
         type: "setState",
         payload: fallbackSkillManagerState({
-          analyticsSession: buildAnalyticsSessionForPlacement("panel", this.extensionVersion),
-          ga4MeasurementId: resolveGa4ForWebview(this.configService),
           sourceRepository: this.configService.getSourceRepository(),
           sourceMode: this.configService.getSourceMode(),
           isConnected: false,
@@ -218,9 +207,7 @@ export class SkillManagerPanel {
       registryService: this.registryService,
       syncEngine: this.syncEngine,
       logger: this.logger,
-      catalogStore: this.catalogStore,
-      analyticsPlacement: "panel",
-      extensionVersion: this.extensionVersion
+      catalogStore: this.catalogStore
     });
   }
 }

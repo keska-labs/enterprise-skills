@@ -26,22 +26,4 @@ describe("ConfigService", () => {
     await service.setSourceRepository("foo/bar");
     expect(mockUpdate).toHaveBeenCalled();
   });
-
-  it("reads GA4 allow-without-telemetry default false", () => {
-    mockGet.mockReturnValue(false);
-    const service = new ConfigService();
-    expect(service.getGa4AllowWithoutProductTelemetry()).toBe(false);
-    expect(mockGet).toHaveBeenCalledWith("ga4AllowWithoutProductTelemetry", false);
-  });
-
-  it("reads GA4 allow-without-telemetry true", () => {
-    mockGet.mockImplementation((key: string, defaultValue: unknown) => {
-      if (key === "ga4AllowWithoutProductTelemetry") {
-        return true;
-      }
-      return defaultValue;
-    });
-    const service = new ConfigService();
-    expect(service.getGa4AllowWithoutProductTelemetry()).toBe(true);
-  });
 });

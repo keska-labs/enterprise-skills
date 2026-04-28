@@ -27,22 +27,7 @@ export interface BrowseEntry {
 
 export type CatalogStatus = "idle" | "loading" | "ready" | "error";
 
-/** Non-PII context for optional GA4 (host app, versions, placement). Sent whenever state is posted. */
-export interface SkillManagerAnalyticsSession {
-  webviewHost: "sidebar" | "panel";
-  extensionVersion: string;
-  vscodeVersion: string;
-  appName: string;
-  language: string;
-  platform: string;
-  uiKind: "desktop" | "web";
-}
-
 export interface SkillManagerState {
-  /** Non-PII session context for analytics enrichment. */
-  analyticsSession: SkillManagerAnalyticsSession;
-  /** When set (e.g. `G-XXXX`), the webview loads GA4 — see setting `skillSync.ga4MeasurementId`. */
-  ga4MeasurementId: string | null;
   sourceRepository: string;
   sourceMode: "github-repo" | "custom-registry";
   categories: CategoryData[];

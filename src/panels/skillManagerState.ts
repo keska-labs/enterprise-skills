@@ -6,39 +6,8 @@ import { Logger } from "../utils/logger";
 import { deleteSkillFile, deleteSkillPackage, listExistingSkillFiles, listExistingSkillPackages } from "../utils/fileUtils";
 import { ServiceError } from "../services/ServiceError";
 import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
-import {
-  CategoryData,
-  SkillInfo,
-  SkillManagerAnalyticsSession,
-  SkillManagerState
-} from "../../webview-ui/types/messages";
+import { CategoryData, SkillInfo, SkillManagerState } from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
-
-export function resolveGa4MeasurementId(raw: string): string | null {
-  const trimmed = raw.trim();
-  return /^G-[A-Z0-9]+$/i.test(trimmed) ? trimmed.toUpperCase() : null;
-}
-
-let ga4ProductTelemetryBlockLogged = false;
-
-/**
- * Resolves GA4 ID for the webview: valid `G-...` from settings, and unless
- * `skillSync.ga4AllowWithoutProductTelemetry` is true, requires VS Code / Cursor
- * product telemetry (`vscode.env.isTelemetryEnabled`).
- */
-export function resolveGa4ForWebview(configService: ConfigService): string | null {
-  const id = resolveGa4MeasurementId(configService.getGa4MeasurementId());
-  if (!id) {
-    return null;
-  }
-  if (configService.getGa4AllowWithoutProductTelemetry()) {
-    return id;
-  }
-  if (!vscode.env.isTelemetryEnabled) {
-    return null;
-  }
-  return id;
-}
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
@@ -46,27 +15,6 @@ interface SkillManagerStateDependencies {
   syncEngine: SyncEngine;
   logger: Logger;
   catalogStore: SkillCatalogStore;
-  analyticsPlacement: "sidebar" | "panel";
-  extensionVersion: string;
-}
-
-export function buildAnalyticsSessionForPlacement(
-  placement: "sidebar" | "panel",
-  extensionVersion: string
-): SkillManagerAnalyticsSession {
-  return {
-    webviewHost: placement,
-    extensionVersion,
-    vscodeVersion: vscode.version,
-    appName: vscode.env.appName,
-    language: vscode.env.language,
-    platform: process.platform,
-    uiKind: vscode.env.uiKind === vscode.UIKind.Web ? "web" : "desktop"
-  };
-}
-
-function buildAnalyticsSession(deps: SkillManagerStateDependencies): SkillManagerAnalyticsSession {
-  return buildAnalyticsSessionForPlacement(deps.analyticsPlacement, deps.extensionVersion);
 }
 
 export async function buildSkillManagerState(deps: SkillManagerStateDependencies): Promise<SkillManagerState> {
@@ -147,22 +95,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
   const enabledCategories: CategoryData[] =
     enabledSkills.length > 0 ? [{ name: "Enabled", skills: enabledSkills }] : [];
 
-  const parsedGa4 = resolveGa4MeasurementId(configService.getGa4MeasurementId());
-  const ga4MeasurementId = resolveGa4ForWebview(configService);
-  if (parsedGa4 && !ga4MeasurementId && !ga4ProductTelemetryBlockLogged) {
-    ga4ProductTelemetryBlockLogged = true;
-    logger.warn(
-      "GA4: `skillSync.ga4MeasurementId` is set but the Skill Manager will not load analytics because " +
-        "product telemetry is off (vscode.env.isTelemetryEnabled). " +
-        "Either enable editor telemetry (**Telemetry: Telemetry Level** ≠ off), or set " +
-        "`skillSync.ga4AllowWithoutProductTelemetry` to true to use your GA4 property anyway. " +
-        "See **Output → Agent Skill Sync**."
-    );
-  }
-
   return {
-    analyticsSession: buildAnalyticsSession(deps),
-    ga4MeasurementId,
     sourceRepository,
     sourceMode,
     categories: sourceMode === "custom-registry" ? registryCategories : categories.map((name) => ({ name, skills: [] })),
@@ -183,13 +116,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
 }
 
 export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): SkillManagerState {
-  const { analyticsSession: partialSession, ...partialRest } = partial;
-  const placement = partialSession?.webviewHost ?? "sidebar";
-  const extensionVersion = partialSession?.extensionVersion ?? "0.0.0";
-  const defaultSession = buildAnalyticsSessionForPlacement(placement, extensionVersion);
-
   return {
-    ga4MeasurementId: null,
     sourceRepository: "",
     sourceMode: "github-repo",
     categories: [],
@@ -206,8 +133,7 @@ export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): 
     skillsRootPath: null,
     browseEntries: [],
     catalogSize: 0,
-    ...partialRest,
-    analyticsSession: { ...defaultSession, ...(partialSession ?? {}) }
+    ...partial
   };
 }
 

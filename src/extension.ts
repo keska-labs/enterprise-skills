@@ -34,13 +34,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     catalogStore
   );
-  const extensionVersion =
-    typeof context.extension.packageJSON?.version === "string"
-      ? context.extension.packageJSON.version
-      : "0.0.0";
   const sidebarProvider = new SkillManagerSidebarProvider(
     context.extensionUri,
-    extensionVersion,
     authService,
     configService,
     repoService,
@@ -64,7 +59,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       void sidebarProvider.focus().catch(() => {
         SkillManagerPanel.render(
           context.extensionUri,
-          extensionVersion,
           authService,
           configService,
           repoService,
