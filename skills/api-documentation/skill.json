@@ -1,0 +1,6 @@
+{
+  "name": "api-documentation",
+  "description": "Templates and AI prompts for writing clear, consistent REST and GraphQL API documentation including endpoint descriptions, schema explanations, and code examples.",
+  "version": "1.0.0",
+  "category": "Documentation"
+}

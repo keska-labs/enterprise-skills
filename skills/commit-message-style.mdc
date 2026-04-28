@@ -1,0 +1,61 @@
+---
+description: Enforce conventional commit message style for all git commits.
+---
+
+# Commit Message Style
+
+All commits in this repository must follow **Conventional Commits** (https://www.conventionalcommits.org/).
+
+## Format
+
+```
+<type>(<scope>): <short summary>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+## Types
+
+| Type | When to use |
+|------|-------------|
+| `feat` | A new feature visible to users |
+| `fix` | A bug fix |
+| `docs` | Documentation only changes |
+| `style` | Formatting, missing semicolons, etc. (no logic change) |
+| `refactor` | Code restructuring without feature or fix |
+| `perf` | A performance improvement |
+| `test` | Adding or correcting tests |
+| `build` | Changes to build system or dependencies |
+| `ci` | CI/CD pipeline changes |
+| `chore` | Other maintenance tasks |
+
+## Rules
+
+1. **Subject line**: imperative mood, no trailing period, ≤ 72 characters.
+2. **Scope**: optional; use the module, component, or area affected (e.g. `auth`, `api`, `ui`).
+3. **Body**: wrap at 100 characters; explain *why*, not *what* (the diff shows what).
+4. **Breaking changes**: add `!` after the type/scope (e.g. `feat!:`) and include a `BREAKING CHANGE:` footer.
+5. **Issue references**: add `Closes #<issue>` or `Refs #<issue>` in the footer.
+
+## Examples
+
+```
+feat(auth): add OAuth2 PKCE flow for CLI login
+
+Replace the implicit flow with PKCE to satisfy new GitHub OAuth policies.
+The token is now stored in the system keychain instead of a plain file.
+
+Closes #87
+```
+
+```
+fix(sync): prevent double-delete of skill packages on disconnect
+
+listExistingSkillPackages returned normalised names while the opted-in
+set held raw names, causing every package to appear unrecognised and be
+deleted on the next sync cycle.
+
+Closes #102
+```
