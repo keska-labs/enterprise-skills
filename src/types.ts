@@ -7,6 +7,12 @@ export interface RepoInfo {
   private: boolean;
 }
 
+/**
+ * `cursor-rule` — a single `.mdc` / `.md` file synced to `.cursor/rules/<name>.mdc`.
+ * `skill`       — a directory package with a `skill.json` manifest synced to `.cursor/skills/<name>/`.
+ */
+export type SkillType = "cursor-rule" | "skill";
+
 export interface SkillMeta {
   name: string;
   description?: string;
@@ -14,6 +20,9 @@ export interface SkillMeta {
   category?: string;
   path?: string;
   shaOrVersion: string;
+  skillType: SkillType;
+  /** For skill packages: absolute repo paths of all files within the package directory. */
+  skillFiles?: string[];
 }
 
 export interface SkillContent {

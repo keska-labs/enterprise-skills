@@ -1,9 +1,10 @@
 import * as vscode from "vscode";
 
 const RULES_DIR = ".cursor/rules";
+const SKILLS_DIR = ".cursor/skills";
 const MAX_SKILL_FILE_BYTES = 256 * 1024;
 
-function normalizeSkillName(skillName: string): string {
+export function normalizeSkillName(skillName: string): string {
   const normalized = skillName.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/-+/g, "-");
   const safe = normalized.replace(/^-|-$/g, "");
   if (!safe || safe === "." || safe === "..") {
@@ -20,6 +21,8 @@ function getWorkspaceRootUri(): vscode.Uri {
 
   return workspace.uri;
 }
+
+// ─── Cursor-rule helpers (.cursor/rules/<name>.mdc) ───────────────────────────
 
 export function getSkillFileUri(skillName: string): vscode.Uri {
   return vscode.Uri.joinPath(getWorkspaceRootUri(), RULES_DIR, `${normalizeSkillName(skillName)}.mdc`);
@@ -61,6 +64,60 @@ export async function listExistingSkillFiles(): Promise<string[]> {
     return files
       .filter(([name, fileType]) => fileType === vscode.FileType.File && name.endsWith(".mdc"))
       .map(([name]) => name.replace(/\.mdc$/, ""));
+  } catch {
+    return [];
+  }
+}
+
+// ─── Skill-package helpers (.cursor/skills/<name>/**) ─────────────────────────
+
+export function getSkillPackageDirUri(skillName: string): vscode.Uri {
+  return vscode.Uri.joinPath(getWorkspaceRootUri(), SKILLS_DIR, normalizeSkillName(skillName));
+}
+
+/**
+ * Write a single file within a skill package.
+ * `relativeFilePath` is the path relative to the package directory root
+ * (e.g. `"prompt.md"` or `"examples/sample.md"`).
+ */
+export async function writeSkillPackageFile(
+  skillName: string,
+  relativeFilePath: string,
+  content: string
+): Promise<void> {
+  const bytes = Buffer.byteLength(content, "utf8");
+  if (bytes > MAX_SKILL_FILE_BYTES) {
+    throw new Error(
+      `File ${relativeFilePath} in skill package ${skillName} exceeds size limit (${MAX_SKILL_FILE_BYTES} bytes).`
+    );
+  }
+  const pkgDir = getSkillPackageDirUri(skillName);
+  const fileUri = vscode.Uri.joinPath(pkgDir, ...relativeFilePath.split("/"));
+  // Ensure parent directories exist
+  const parentDir = vscode.Uri.joinPath(fileUri, "..");
+  await vscode.workspace.fs.createDirectory(parentDir);
+  await vscode.workspace.fs.writeFile(fileUri, Buffer.from(content, "utf8"));
+}
+
+export async function deleteSkillPackage(skillName: string): Promise<void> {
+  const pkgDir = getSkillPackageDirUri(skillName);
+  try {
+    await vscode.workspace.fs.delete(pkgDir, { recursive: true, useTrash: false });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes("ENOENT") && !message.includes("not found")) {
+      throw error;
+    }
+  }
+}
+
+export async function listExistingSkillPackages(): Promise<string[]> {
+  try {
+    const skillsDir = vscode.Uri.joinPath(getWorkspaceRootUri(), SKILLS_DIR);
+    const entries = await vscode.workspace.fs.readDirectory(skillsDir);
+    return entries
+      .filter(([, fileType]) => fileType === vscode.FileType.Directory)
+      .map(([name]) => name);
   } catch {
     return [];
   }

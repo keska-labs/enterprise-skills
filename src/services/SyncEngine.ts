@@ -4,7 +4,15 @@ import { ConfigService } from "./ConfigService";
 import { RepoService } from "./RepoService";
 import { RegistryService } from "./RegistryService";
 import { Logger } from "../utils/logger";
-import { deleteSkillFile, listExistingSkillFiles, writeSkillFile } from "../utils/fileUtils";
+import {
+  deleteSkillFile,
+  deleteSkillPackage,
+  listExistingSkillFiles,
+  listExistingSkillPackages,
+  normalizeSkillName,
+  writeSkillFile,
+  writeSkillPackageFile
+} from "../utils/fileUtils";
 import { SkillMeta, SyncFailureReason, SyncResult, SyncStatus } from "../types";
 import { ServiceError } from "./ServiceError";
 import { SkillCatalogStore, buildSourceKey } from "./SkillCatalogStore";
@@ -96,21 +104,57 @@ export class SyncEngine implements vscode.Disposable {
           continue;
         }
 
-        const content = sourceMode === "github-repo"
-          ? await this.getGithubSkillContent(meta.path)
-          : await this.registryService.getSkillContent(meta.path);
-        await writeSkillFile(skillName, content.content);
-        this.skillShaCache.set(skillName, content.shaOrVersion);
-        result.updated.push(skillName);
+        try {
+          if (meta.skillType === "skill") {
+            await this.syncSkillPackage(meta, sourceMode, result);
+          } else {
+            const content = sourceMode === "github-repo"
+              ? await this.getGithubSkillContent(meta.path)
+              : await this.registryService.getSkillContent(meta.path);
+            await writeSkillFile(skillName, content.content);
+            this.skillShaCache.set(skillName, content.shaOrVersion);
+            result.updated.push(skillName);
+          }
+        } catch (itemError) {
+          const msg = itemError instanceof Error ? itemError.message : String(itemError);
+          result.errors.push(`Failed to sync ${skillName}: ${msg}`);
+          this.logger.error(`Failed to sync ${skillName}`, itemError);
+        }
       }
 
+      // Clean up cursor-rules no longer opted-in.
+      // Both listExistingSkillFiles and listExistingSkillPackages return normalized names
+      // (already transformed by normalizeSkillName when written), so compare against a
+      // normalized version of the opted-in set to avoid accidental deletions when skill
+      // names from skill.json have spaces or mixed case.
+      const normalizedOptedInSet = new Set(
+        optedInSkills.flatMap((n) => {
+          try {
+            return [normalizeSkillName(n)];
+          } catch {
+            return [];
+          }
+        })
+      );
+
       const existingFiles = await listExistingSkillFiles();
-      const optedInSet = new Set(optedInSkills);
       for (const fileSkillName of existingFiles) {
-        if (!optedInSet.has(fileSkillName)) {
+        if (!normalizedOptedInSet.has(fileSkillName)) {
           await deleteSkillFile(fileSkillName);
           result.deleted.push(fileSkillName);
           this.skillShaCache.delete(fileSkillName);
+        }
+      }
+
+      // Clean up skill packages no longer opted-in
+      const existingPackages = await listExistingSkillPackages();
+      for (const pkgName of existingPackages) {
+        if (!normalizedOptedInSet.has(pkgName)) {
+          await deleteSkillPackage(pkgName);
+          if (!result.deleted.includes(pkgName)) {
+            result.deleted.push(pkgName);
+          }
+          this.skillShaCache.delete(pkgName);
         }
       }
 
@@ -152,7 +196,9 @@ export class SyncEngine implements vscode.Disposable {
 
   public async syncSingle(skillName: string, optIn: boolean): Promise<SyncResult> {
     if (!optIn) {
+      // Try removing as both types gracefully
       await deleteSkillFile(skillName);
+      await deleteSkillPackage(skillName);
       this.skillShaCache.delete(skillName);
       const result = this.createResult("success", "none", `Disabled ${skillName}.`);
       result.deleted.push(skillName);
@@ -165,6 +211,38 @@ export class SyncEngine implements vscode.Disposable {
       result.message = `Failed to enable ${skillName}. ${result.message}`;
     }
     return result;
+  }
+
+  private async syncSkillPackage(
+    meta: SkillMeta,
+    sourceMode: "github-repo" | "custom-registry",
+    result: SyncResult
+  ): Promise<void> {
+    const files = meta.skillFiles ?? [];
+    const skillName = meta.name;
+
+    if (files.length === 0) {
+      this.logger.warn(`Skill package ${skillName} has no files listed; skipping.`);
+      return;
+    }
+
+    const packageDirPath = meta.path ?? "";
+
+    for (const filePath of files) {
+      // relativePath = portion after the package directory
+      const relPath = filePath.startsWith(`${packageDirPath}/`)
+        ? filePath.slice(packageDirPath.length + 1)
+        : filePath.split("/").pop() ?? filePath;
+
+      const content = sourceMode === "github-repo"
+        ? await this.getGithubSkillContent(filePath)
+        : await this.registryService.getSkillContent(filePath);
+
+      await writeSkillPackageFile(skillName, relPath, content.content);
+    }
+
+    this.skillShaCache.set(skillName, meta.shaOrVersion);
+    result.updated.push(skillName);
   }
 
   private async getGithubSkills(): Promise<SkillMeta[]> {

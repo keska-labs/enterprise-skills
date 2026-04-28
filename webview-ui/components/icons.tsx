@@ -124,6 +124,28 @@ export function IconSearch(props: IconProps): React.JSX.Element {
   );
 }
 
+/** Badge icon for cursor-rule items (single `.mdc` file). */
+export function IconCursorRule(props: IconProps): React.JSX.Element {
+  const p = dims(props, 12);
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden {...p}>
+      <rect x="2" y="1" width="12" height="14" rx="1.5" opacity="0.18" />
+      <path d="M4 5h8M4 7.5h8M4 10h5" strokeWidth="1.2" stroke="currentColor" fill="none" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Badge icon for skill-package items (directory with multiple files). */
+export function IconSkillPkg(props: IconProps): React.JSX.Element {
+  const p = dims(props, 12);
+  return (
+    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden {...p}>
+      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h4L9 4.5H13A1.5 1.5 0 0 1 14.5 6v6A1.5 1.5 0 0 1 13 13.5H3.5A1.5 1.5 0 0 1 2 12V4.5z" opacity="0.88" />
+      <path d="M6.5 9l1.5 1.5L11 7" strokeWidth="1.3" stroke="white" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export function IconPencil(props: IconProps): React.JSX.Element {
   const p = dims(props, 14);
   return (

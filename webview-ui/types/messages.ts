@@ -1,8 +1,17 @@
+/**
+ * `cursor-rule` — a single `.mdc` file synced to `.cursor/rules/`.
+ * `skill`       — a directory package synced to `.cursor/skills/`.
+ */
+export type SkillType = "cursor-rule" | "skill";
+
 export interface SkillInfo {
   name: string;
   description: string;
   version: string;
   category: string;
+  skillType: SkillType;
+  /** Number of files in the package (only meaningful for `skill` type). */
+  fileCount?: number;
 }
 
 export interface CategoryData {
@@ -18,7 +27,22 @@ export interface BrowseEntry {
 
 export type CatalogStatus = "idle" | "loading" | "ready" | "error";
 
+/** Non-PII context for optional GA4 (host app, versions, placement). Sent whenever state is posted. */
+export interface SkillManagerAnalyticsSession {
+  webviewHost: "sidebar" | "panel";
+  extensionVersion: string;
+  vscodeVersion: string;
+  appName: string;
+  language: string;
+  platform: string;
+  uiKind: "desktop" | "web";
+}
+
 export interface SkillManagerState {
+  /** Non-PII session context for analytics enrichment. */
+  analyticsSession: SkillManagerAnalyticsSession;
+  /** When set (e.g. `G-XXXX`), the webview loads GA4 — see setting `skillSync.ga4MeasurementId`. */
+  ga4MeasurementId: string | null;
   sourceRepository: string;
   sourceMode: "github-repo" | "custom-registry";
   categories: CategoryData[];
