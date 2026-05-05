@@ -24,16 +24,24 @@ export class RegistryService {
     this.client = axios.create({ timeout: 15000 });
   }
 
-  private get registryUrl(): string {
-    const url = this.configService.getRegistryUrl();
-    if (!url) {
-      throw new ServiceError("source_invalid", "skillSync.registryUrl is not configured.");
+  /**
+   * Resolve the base registry URL.
+   *
+   * `explicitUrl` is the per-source URL coming from `skillSync.sources[].value`
+   * (multi-source flow). When omitted, we fall back to the deprecated
+   * `skillSync.registryUrl` config key for backwards compatibility — this only
+   * matters when callers haven't migrated to the per-source orchestrator yet.
+   */
+  private resolveRegistryUrl(explicitUrl?: string): string {
+    const raw = explicitUrl?.trim() || this.configService.getRegistryUrl();
+    if (!raw) {
+      throw new ServiceError("source_invalid", "Custom registry URL is not configured.");
     }
     let parsed: URL;
     try {
-      parsed = new URL(url);
+      parsed = new URL(raw);
     } catch {
-      throw new ServiceError("source_invalid", "skillSync.registryUrl must be a valid URL.");
+      throw new ServiceError("source_invalid", `Custom registry URL is not a valid URL: ${raw}`);
     }
 
     const isLocalhost = RegistryService.LOCAL_HOSTS.has(parsed.hostname);
@@ -55,10 +63,11 @@ export class RegistryService {
     return { Authorization: `Bearer ${token}` };
   }
 
-  public async listSkills(): Promise<SkillMeta[]> {
+  public async listSkills(registryUrl?: string): Promise<SkillMeta[]> {
+    const baseUrl = this.resolveRegistryUrl(registryUrl);
     try {
       const headers = await this.getAuthHeaders();
-      const response = await this.client.get<RegistrySkill[]>(`${this.registryUrl}/skills`, { headers });
+      const response = await this.client.get<RegistrySkill[]>(`${baseUrl}/skills`, { headers });
       return response.data.map((skill) => ({
         name: skill.name,
         description: skill.description,
@@ -74,10 +83,11 @@ export class RegistryService {
     }
   }
 
-  public async getSkillContent(id: string): Promise<SkillContent> {
+  public async getSkillContent(id: string, registryUrl?: string): Promise<SkillContent> {
+    const baseUrl = this.resolveRegistryUrl(registryUrl);
     try {
       const headers = await this.getAuthHeaders();
-      const response = await this.client.get<{ content: string; version: string }>(`${this.registryUrl}/skills/${id}/content`, { headers });
+      const response = await this.client.get<{ content: string; version: string }>(`${baseUrl}/skills/${id}/content`, { headers });
       return {
         content: response.data.content,
         shaOrVersion: response.data.version

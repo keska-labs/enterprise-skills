@@ -33,7 +33,8 @@ export class SourceProviderRegistry {
     }
 
     if (sourceKey.startsWith("registry:")) {
-      const provider = new RegistryCatalogProvider(this.registryService);
+      const url = sourceKey.slice("registry:".length).trim();
+      const provider = new RegistryCatalogProvider(this.registryService, url || undefined);
       this.providers.set(sourceKey, provider);
       return provider;
     }

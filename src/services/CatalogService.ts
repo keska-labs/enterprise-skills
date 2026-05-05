@@ -1,4 +1,4 @@
-import { SkillContent, SkillMeta } from "../types";
+import { ResolvedSource, SkillContent, SkillMeta, SkillMetaSource } from "../types";
 import { SkillCatalogStore } from "./SkillCatalogStore";
 import { CatalogSnapshot } from "./SourceCatalogProvider";
 import { SourceProviderRegistry } from "./SourceProviderRegistry";
@@ -11,12 +11,23 @@ export class CatalogService {
     private readonly providers: SourceProviderRegistry
   ) {}
 
-  public async getCatalog(sourceKey: string, opts?: { forceRefresh?: boolean }): Promise<CatalogSnapshot> {
+  /**
+   * Fetch the catalog for a single source. Accepts either a raw `sourceKey`
+   * string (legacy callers) or a `ResolvedSource` so the loaded metas can be
+   * stamped with their source provenance.
+   */
+  public async getCatalog(
+    sourceOrKey: string | ResolvedSource,
+    opts?: { forceRefresh?: boolean }
+  ): Promise<CatalogSnapshot> {
     const forceRefresh = opts?.forceRefresh ?? false;
+    const sourceKey = typeof sourceOrKey === "string" ? sourceOrKey : sourceOrKey.sourceKey;
+    const stamp = typeof sourceOrKey === "string" ? undefined : toMetaSource(sourceOrKey);
+
     if (!forceRefresh) {
       const cached = this.store.load(sourceKey);
       if (cached && cached.metas.length > 0 && !hasIncompleteSkillPackages(cached.metas)) {
-        return cached;
+        return stamp ? withSource(cached, stamp) : cached;
       }
     }
 
@@ -29,7 +40,7 @@ export class CatalogService {
     const pending = provider.fetchCatalog()
       .then((snapshot) => {
         this.store.save(sourceKey, snapshot.skillsRoot, snapshot.metas);
-        return snapshot;
+        return stamp ? withSource(snapshot, stamp) : snapshot;
       })
       .finally(() => {
         this.inFlight.delete(sourceKey);
@@ -54,6 +65,22 @@ export class CatalogService {
     }
     return provider.listChildren(path);
   }
+}
+
+function toMetaSource(resolved: ResolvedSource): SkillMetaSource {
+  return {
+    type: resolved.type,
+    value: resolved.value,
+    label: resolved.label,
+    sourceKey: resolved.sourceKey
+  };
+}
+
+function withSource(snapshot: CatalogSnapshot, source: SkillMetaSource): CatalogSnapshot {
+  return {
+    skillsRoot: snapshot.skillsRoot,
+    metas: snapshot.metas.map((meta) => ({ ...meta, source }))
+  };
 }
 
 export function hasIncompleteSkillPackages(metas: SkillMeta[]): boolean {
