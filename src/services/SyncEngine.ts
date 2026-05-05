@@ -1,8 +1,6 @@
 import * as vscode from "vscode";
 import { AuthService } from "./AuthService";
 import { ConfigService } from "./ConfigService";
-import { RepoService } from "./RepoService";
-import { RegistryService } from "./RegistryService";
 import { Logger } from "../utils/logger";
 import {
   deleteSkillFile,
@@ -15,14 +13,15 @@ import {
 } from "../utils/fileUtils";
 import { SkillMeta, SyncFailureReason, SyncResult, SyncStatus } from "../types";
 import { ServiceError } from "./ServiceError";
-import { SkillCatalogStore, buildSourceKey } from "./SkillCatalogStore";
+import { currentSourceKey } from "./SkillCatalogStore";
+import { CatalogService } from "./CatalogService";
 import { writeWorkspaceCatalogManifest } from "../utils/catalogManifest";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
 export class SyncEngine implements vscode.Disposable {
   private intervalHandle?: NodeJS.Timeout;
-  private readonly skillShaCache = new Map<string, string>();
+  private readonly skillShaCache = new Map<string, Map<string, string>>();
   private readonly syncEventEmitter = new vscode.EventEmitter<SyncResult>();
   private lastBackgroundFailureReason: SyncFailureReason = "none";
   private lastResult = this.createResult("skipped", "unknown", "Sync has not run yet.");
@@ -31,10 +30,8 @@ export class SyncEngine implements vscode.Disposable {
   public constructor(
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
-    private readonly repoService: RepoService,
-    private readonly registryService: RegistryService,
     private readonly logger: Logger,
-    private readonly catalogStore: SkillCatalogStore
+    private readonly catalogService: CatalogService
   ) {}
 
   public readonly onSyncComplete = this.syncEventEmitter.event;
@@ -91,21 +88,15 @@ export class SyncEngine implements vscode.Disposable {
     }
 
     const optedInSkills = this.configService.getOptedInSkills();
-    const sourceMode = this.configService.getSourceMode();
-    const sourceKey = buildSourceKey(
-      sourceMode,
-      this.configService.getSourceRepository(),
-      this.configService.getRegistryUrl()
-    );
+    const sourceKey = currentSourceKey(this.configService);
     let catalogSnapshotForManifest: SkillMeta[] | undefined;
 
     try {
-      const skillIndex = sourceMode === "github-repo"
-        ? await this.getGithubSkills()
-        : await this.registryService.listSkills();
+      const skillIndex = (await this.catalogService.getCatalog(sourceKey, { forceRefresh: isManual })).metas;
       catalogSnapshotForManifest = skillIndex;
 
       const indexByName = new Map(skillIndex.map((skill) => [skill.name, skill]));
+      const sourceShaCache = this.getSourceShaCache(sourceKey);
 
       for (const skillName of optedInSkills) {
         const meta = indexByName.get(skillName);
@@ -114,20 +105,18 @@ export class SyncEngine implements vscode.Disposable {
           continue;
         }
 
-        const previousSha = this.skillShaCache.get(skillName);
+        const previousSha = sourceShaCache.get(skillName);
         if (previousSha === meta.shaOrVersion) {
           continue;
         }
 
         try {
           if (meta.skillType === "skill") {
-            await this.syncSkillPackage(meta, sourceMode, result);
+            await this.syncSkillPackage(meta, sourceKey, result);
           } else {
-            const content = sourceMode === "github-repo"
-              ? await this.getGithubSkillContent(meta.path)
-              : await this.registryService.getSkillContent(meta.path);
+            const content = await this.catalogService.getContent(sourceKey, meta.path);
             await writeSkillFile(skillName, content.content);
-            this.skillShaCache.set(skillName, content.shaOrVersion);
+            sourceShaCache.set(skillName, content.shaOrVersion);
             result.updated.push(skillName);
           }
         } catch (itemError) {
@@ -157,7 +146,7 @@ export class SyncEngine implements vscode.Disposable {
         if (!normalizedOptedInSet.has(fileSkillName)) {
           await deleteSkillFile(fileSkillName);
           result.deleted.push(fileSkillName);
-          this.skillShaCache.delete(fileSkillName);
+          sourceShaCache.delete(fileSkillName);
         }
       }
 
@@ -169,7 +158,7 @@ export class SyncEngine implements vscode.Disposable {
           if (!result.deleted.includes(pkgName)) {
             result.deleted.push(pkgName);
           }
-          this.skillShaCache.delete(pkgName);
+          sourceShaCache.delete(pkgName);
         }
       }
 
@@ -222,7 +211,7 @@ export class SyncEngine implements vscode.Disposable {
       // Try removing as both types gracefully
       await deleteSkillFile(skillName);
       await deleteSkillPackage(skillName);
-      this.skillShaCache.delete(skillName);
+      this.getSourceShaCache(currentSourceKey(this.configService)).delete(skillName);
       const result = this.createResult("success", "none", `Disabled ${skillName}.`);
       result.deleted.push(skillName);
       this.emitResult(result, true);
@@ -238,7 +227,7 @@ export class SyncEngine implements vscode.Disposable {
 
   private async syncSkillPackage(
     meta: SkillMeta,
-    sourceMode: "github-repo" | "custom-registry",
+    sourceKey: string,
     result: SyncResult
   ): Promise<void> {
     const files = meta.skillFiles ?? [];
@@ -249,6 +238,7 @@ export class SyncEngine implements vscode.Disposable {
       return;
     }
 
+    const sourceShaCache = this.getSourceShaCache(sourceKey);
     const packageDirPath = meta.path ?? "";
 
     for (const filePath of files) {
@@ -257,70 +247,22 @@ export class SyncEngine implements vscode.Disposable {
         ? filePath.slice(packageDirPath.length + 1)
         : filePath.split("/").pop() ?? filePath;
 
-      const content = sourceMode === "github-repo"
-        ? await this.getGithubSkillContent(filePath)
-        : await this.registryService.getSkillContent(filePath);
+      const content = await this.catalogService.getContent(sourceKey, filePath);
 
       await writeSkillPackageFile(skillName, relPath, content.content);
     }
 
-    this.skillShaCache.set(skillName, meta.shaOrVersion);
+    sourceShaCache.set(skillName, meta.shaOrVersion);
     result.updated.push(skillName);
   }
 
-  private async getGithubSkills(): Promise<SkillMeta[]> {
-    const repoRef = this.configService.getSourceRepository();
-    const parsed = this.parseGithubRepoRef(repoRef);
-    const owner = parsed?.owner;
-    const repo = parsed?.repo;
-    if (!owner || !repo) {
-      throw new Error("skillSync.sourceRepository must be set as owner/repository.");
+  private getSourceShaCache(sourceKey: string): Map<string, string> {
+    let sourceCache = this.skillShaCache.get(sourceKey);
+    if (!sourceCache) {
+      sourceCache = new Map<string, string>();
+      this.skillShaCache.set(sourceKey, sourceCache);
     }
-    const sourceKey = buildSourceKey("github-repo", repoRef, "");
-    const cached = this.catalogStore.load(sourceKey);
-    if (cached && cached.metas.length > 0 && !this.hasIncompleteSkillPackages(cached.metas)) {
-      return cached.metas;
-    }
-    const metas = await this.repoService.listSkillsInRepo(owner, repo);
-    const root = await this.repoService.resolveSkillsRootPath(owner, repo);
-    this.catalogStore.save(sourceKey, root, metas);
-    return metas;
-  }
-
-  private hasIncompleteSkillPackages(metas: SkillMeta[]): boolean {
-    return metas.some((meta) => meta.skillType === "skill" && (meta.skillFiles?.length ?? 0) === 0);
-  }
-
-  private async getGithubSkillContent(path: string) {
-    const repoRef = this.configService.getSourceRepository();
-    const parsed = this.parseGithubRepoRef(repoRef);
-    const owner = parsed?.owner;
-    const repo = parsed?.repo;
-    if (!owner || !repo) {
-      throw new Error("skillSync.sourceRepository must be set as owner/repository.");
-    }
-    return this.repoService.getSkillContent(owner, repo, path);
-  }
-
-  private parseGithubRepoRef(repoRef: string): { owner: string; repo: string } | null {
-    const trimmed = repoRef.trim();
-    const sshMatch = trimmed.match(/[:/]([^/\s:]+)\/([^/\s]+?)(?:\.git)?$/);
-    if (sshMatch) {
-      return {
-        owner: sshMatch[1],
-        repo: sshMatch[2]
-      };
-    }
-
-    const parts = trimmed.split("/").filter(Boolean);
-    if (parts.length === 2) {
-      return {
-        owner: parts[0],
-        repo: parts[1].replace(/\.git$/i, "")
-      };
-    }
-
-    return null;
+    return sourceCache;
   }
 
   public dispose(): void {

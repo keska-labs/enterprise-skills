@@ -9,6 +9,8 @@ import { configureSource, registerCommands } from "./commands/registerCommands";
 import { SkillManagerPanel } from "./panels/SkillManagerPanel";
 import { SkillManagerSidebarProvider } from "./panels/SkillManagerSidebarProvider";
 import { SkillCatalogStore } from "./services/SkillCatalogStore";
+import { CatalogService } from "./services/CatalogService";
+import { SourceProviderRegistry } from "./services/SourceProviderRegistry";
 import { WorkspaceAnalyzer } from "./services/WorkspaceAnalyzer";
 import { LlmRecommendationCache } from "./services/LlmRecommendationCache";
 import { LlmSkillRecommender } from "./services/LlmSkillRecommender";
@@ -30,26 +32,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const repoService = new RepoService(authService);
   const registryService = new RegistryService(authService, configService);
   const catalogStore = new SkillCatalogStore(context.globalState);
+  const providerRegistry = new SourceProviderRegistry(repoService, registryService);
+  const catalogService = new CatalogService(catalogStore, providerRegistry);
   const workspaceAnalyzer = new WorkspaceAnalyzer();
   const llmRecommendationCache = new LlmRecommendationCache(context.globalState);
   const llmSkillRecommender = new LlmSkillRecommender(context.secrets, configService, llmRecommendationCache, logger);
   const syncEngine = new SyncEngine(
     authService,
     configService,
-    repoService,
-    registryService,
     logger,
-    catalogStore
+    catalogService
   );
   const sidebarProvider = new SkillManagerSidebarProvider(
     context.extensionUri,
     authService,
     configService,
     repoService,
-    registryService,
     syncEngine,
     logger,
     catalogStore,
+    catalogService,
     workspaceAnalyzer,
     llmSkillRecommender
   );
@@ -71,10 +73,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           authService,
           configService,
           repoService,
-          registryService,
           syncEngine,
           logger,
           catalogStore,
+          catalogService,
           workspaceAnalyzer,
           llmSkillRecommender,
           configureSource

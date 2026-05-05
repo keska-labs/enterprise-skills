@@ -1,7 +1,8 @@
 import { ConfigService } from "../services/ConfigService";
+import { CatalogService } from "../services/CatalogService";
 import { RepoService } from "../services/RepoService";
 import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
-import { BrowseEntry, ExtensionMessage, SkillInfo } from "../../webview-ui/types/messages";
+import { BrowseEntry, ExtensionMessage } from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
 import { parseGithubRepoRef } from "./skillManagerState";
 import { persistCatalogManifestFromStore } from "../utils/catalogManifest";
@@ -58,19 +59,9 @@ function skillFileMetas(
   return metas;
 }
 
-function metaToSkillInfo(m: SkillMeta): SkillInfo {
-  return {
-    name: m.name,
-    description: m.description ?? "",
-    version: m.version ?? m.shaOrVersion.slice(0, 7),
-    category: m.category ?? "Uncategorized",
-    skillType: m.skillType,
-    fileCount: m.skillFiles?.length
-  };
-}
-
 export async function handleGithubLoadBrowseRoot(
   configService: ConfigService,
+  catalogService: CatalogService,
   repoService: RepoService,
   catalogStore: SkillCatalogStore,
   postMessage: (msg: ExtensionMessage) => void
@@ -83,20 +74,22 @@ export async function handleGithubLoadBrowseRoot(
     postMessage({ type: "error", message: "Invalid repository format." });
     return;
   }
-  const skillsRoot = await repoService.resolveSkillsRootPath(g.owner, g.repo);
-  const entries = await repoService.listDirectoryEntries(g.owner, g.repo, skillsRoot);
+  const cachedRoot = catalogStore.load(g.sourceKey)?.skillsRoot;
+  const skillsRoot = cachedRoot || await repoService.resolveSkillsRootPath(g.owner, g.repo);
+  const entries = await catalogService.listChildren(g.sourceKey, skillsRoot);
   postMessage({
     type: "browseUpdate",
     parentPath: skillsRoot,
     entries: toBrowseEntries(entries),
     skillsRootPath: skillsRoot
   });
-  catalogStore.merge(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  catalogService.mergeBrowseListing(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
   persistCatalogManifestFromStore(catalogStore, g.sourceKey);
 }
 
 export async function handleGithubExpandBrowsePath(
   configService: ConfigService,
+  catalogService: CatalogService,
   repoService: RepoService,
   catalogStore: SkillCatalogStore,
   dirPath: string,
@@ -109,49 +102,14 @@ export async function handleGithubExpandBrowsePath(
   if (!g) {
     return;
   }
-  const entries = await repoService.listDirectoryEntries(g.owner, g.repo, dirPath);
+  const entries = await catalogService.listChildren(g.sourceKey, dirPath);
   postMessage({
     type: "browseUpdate",
     parentPath: dirPath,
     entries: toBrowseEntries(entries)
   });
-  const skillsRoot =
-    catalogStore.load(g.sourceKey)?.skillsRoot || (await repoService.resolveSkillsRootPath(g.owner, g.repo));
-  catalogStore.merge(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  const snapshot = await catalogService.getCatalog(g.sourceKey);
+  const skillsRoot = snapshot.skillsRoot || await repoService.resolveSkillsRootPath(g.owner, g.repo);
+  catalogService.mergeBrowseListing(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
   persistCatalogManifestFromStore(catalogStore, g.sourceKey);
-}
-
-export async function handleGithubSearchCatalog(
-  configService: ConfigService,
-  repoService: RepoService,
-  catalogStore: SkillCatalogStore,
-  query: string,
-  postMessage: (msg: ExtensionMessage) => void
-): Promise<void> {
-  if (configService.getSourceMode() !== "github-repo") {
-    return;
-  }
-  const g = githubRepoRef(configService);
-  if (!g) {
-    return;
-  }
-  const qTrim = query.trim();
-  if (!qTrim) {
-    postMessage({ type: "catalogSearchResults", query: "", skills: [] });
-    return;
-  }
-  const all = await repoService.listSkillsInRepo(g.owner, g.repo);
-  const root = await repoService.resolveSkillsRootPath(g.owner, g.repo);
-  catalogStore.save(g.sourceKey, root, all);
-  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
-  const q = qTrim.toLowerCase();
-  const skills: SkillInfo[] = all
-    .filter(
-      (s) =>
-        s.name.toLowerCase().includes(q) ||
-        (s.description ?? "").toLowerCase().includes(q) ||
-        (s.category ?? "").toLowerCase().includes(q)
-    )
-    .map(metaToSkillInfo);
-  postMessage({ type: "catalogSearchResults", query: qTrim, skills });
 }

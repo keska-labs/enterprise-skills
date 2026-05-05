@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { SkillMeta } from "../types";
+import { ConfigService } from "./ConfigService";
 
 const STORAGE_VERSION = 4; // bumped: SkillMeta.triggers + browse merge preserves indexed manifests
 
@@ -46,6 +47,14 @@ export function buildSourceKey(sourceMode: "github-repo" | "custom-registry", so
     return `github:${sourceRepository.trim()}`;
   }
   return `registry:${registryUrl.trim()}`;
+}
+
+export function currentSourceKey(configService: ConfigService): string {
+  return buildSourceKey(
+    configService.getSourceMode(),
+    configService.getSourceRepository(),
+    configService.getRegistryUrl()
+  );
 }
 
 export class SkillCatalogStore {
