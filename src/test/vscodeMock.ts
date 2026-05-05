@@ -22,7 +22,10 @@ const mockVscode = {
       update: jest.fn()
     })),
     workspaceFolders: [{
-      uri: { fsPath: "/tmp/workspace" }
+      uri: {
+        fsPath: "/tmp/workspace",
+        toString: () => "file:///tmp/workspace"
+      }
     }],
     findFiles: jest.fn().mockResolvedValue([]),
     asRelativePath: jest.fn((uri: { fsPath?: string } | string) => {
@@ -53,7 +56,36 @@ const mockVscode = {
   },
   commands: {
     registerCommand: jest.fn(),
-    executeCommand: jest.fn()
+    executeCommand: jest.fn(),
+    getCommands: jest.fn().mockResolvedValue([])
+  },
+  CancellationTokenSource: class {
+    public token = {
+      isCancellationRequested: false,
+      onCancellationRequested: jest.fn(() => ({ dispose: jest.fn() }))
+    };
+
+    public cancel(): void {
+      this.token.isCancellationRequested = true;
+    }
+
+    public dispose(): void {
+      /* noop */
+    }
+  },
+  env: {
+    clipboard: {
+      writeText: jest.fn().mockResolvedValue(undefined)
+    },
+    openExternal: jest.fn().mockResolvedValue(true),
+    appName: "Cursor",
+    uriScheme: "cursor"
+  },
+  lm: {
+    selectChatModels: jest.fn().mockResolvedValue([])
+  },
+  LanguageModelChatMessage: {
+    User: (text: string) => ({ role: "user", content: text })
   },
   ConfigurationTarget: {
     Workspace: 1
@@ -66,7 +98,8 @@ const mockVscode = {
   },
   Uri: {
     joinPath: (...parts: Array<{ fsPath?: string } | string>) => ({ fsPath: parts.map((p) => (typeof p === "string" ? p : p.fsPath ?? "")).join("/") }),
-    file: (p: string) => ({ fsPath: p })
+    file: (p: string) => ({ fsPath: p }),
+    parse: (value: string) => ({ toString: () => value, scheme: value.split(":")[0] ?? "", path: value })
   },
   extensions: {
     all: []
