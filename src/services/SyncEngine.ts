@@ -16,6 +16,7 @@ import {
 import { SkillMeta, SyncFailureReason, SyncResult, SyncStatus } from "../types";
 import { ServiceError } from "./ServiceError";
 import { SkillCatalogStore, buildSourceKey } from "./SkillCatalogStore";
+import { writeWorkspaceCatalogManifest } from "../utils/catalogManifest";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
@@ -91,11 +92,18 @@ export class SyncEngine implements vscode.Disposable {
 
     const optedInSkills = this.configService.getOptedInSkills();
     const sourceMode = this.configService.getSourceMode();
+    const sourceKey = buildSourceKey(
+      sourceMode,
+      this.configService.getSourceRepository(),
+      this.configService.getRegistryUrl()
+    );
+    let catalogSnapshotForManifest: SkillMeta[] | undefined;
 
     try {
       const skillIndex = sourceMode === "github-repo"
         ? await this.getGithubSkills()
         : await this.registryService.listSkills();
+      catalogSnapshotForManifest = skillIndex;
 
       const indexByName = new Map(skillIndex.map((skill) => [skill.name, skill]));
 
@@ -195,6 +203,14 @@ export class SyncEngine implements vscode.Disposable {
       result.message = syncError.message;
       result.errors.push(syncError.message);
       this.logger.error("Sync failed", error);
+    }
+
+    if (
+      catalogSnapshotForManifest &&
+      catalogSnapshotForManifest.length > 0 &&
+      (result.status === "success" || result.status === "partial")
+    ) {
+      void writeWorkspaceCatalogManifest(sourceKey, catalogSnapshotForManifest);
     }
 
     this.emitResult(result, isManual);

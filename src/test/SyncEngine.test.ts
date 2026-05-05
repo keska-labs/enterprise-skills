@@ -20,6 +20,7 @@ describe("SyncEngine", () => {
       getOptedInSkills: jest.fn().mockReturnValue(["skill-a"]),
       getSourceMode: jest.fn().mockReturnValue("github-repo"),
       getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      getRegistryUrl: jest.fn().mockReturnValue(""),
       isSourceConfigured: jest.fn().mockReturnValue(true)
     } as unknown as ConfigService;
     const repo = {
@@ -49,6 +50,7 @@ describe("SyncEngine", () => {
       getOptedInSkills: jest.fn().mockReturnValue([]),
       getSourceMode: jest.fn().mockReturnValue("github-repo"),
       getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      getRegistryUrl: jest.fn().mockReturnValue(""),
       isSourceConfigured: jest.fn().mockReturnValue(true)
     } as unknown as ConfigService;
     const repo = {} as RepoService;
@@ -114,6 +116,7 @@ describe("SyncEngine", () => {
       getOptedInSkills: jest.fn().mockReturnValue(["api-documentation"]),
       getSourceMode: jest.fn().mockReturnValue("github-repo"),
       getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      getRegistryUrl: jest.fn().mockReturnValue(""),
       isSourceConfigured: jest.fn().mockReturnValue(true)
     } as unknown as ConfigService;
     const repo = {
