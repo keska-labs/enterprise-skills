@@ -72,7 +72,21 @@ export interface SkillContent {
 }
 
 export type SyncStatus = "success" | "partial" | "skipped" | "failed";
-export type SyncFailureReason = "none" | "no_session" | "auth_expired" | "network" | "source_invalid" | "unknown";
+export type SyncFailureReason =
+  | "none"
+  | "no_session"
+  | "auth_expired"
+  | "rate_limited"
+  | "network"
+  | "source_invalid"
+  | "unknown";
+
+export interface StaleSourceInfo {
+  label: string;
+  reason: SyncFailureReason;
+  /** ISO timestamp of when the upstream is expected to be reachable again. */
+  retryAt?: string;
+}
 
 export interface SyncResult {
   status: SyncStatus;
@@ -82,4 +96,6 @@ export interface SyncResult {
   updated: string[];
   deleted: string[];
   errors: string[];
+  /** Sources whose snapshots were served from cache because the upstream fetch failed. */
+  staleSources: StaleSourceInfo[];
 }
