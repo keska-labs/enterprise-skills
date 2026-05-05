@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import { SkillMeta } from "../types";
 
-const STORAGE_VERSION = 3; // bumped: skill packages now use SKILL.md (agentskills.io spec)
+const STORAGE_VERSION = 4; // bumped: SkillMeta.triggers + browse merge preserves indexed manifests
 
 interface StoredCatalogPayload {
   v: typeof STORAGE_VERSION;
@@ -12,6 +12,33 @@ interface StoredCatalogPayload {
 
 function catalogKey(sourceKey: string): string {
   return `agentSkillSync.catalog.v${STORAGE_VERSION}:${sourceKey}`;
+}
+
+/**
+ * Browse (`skillManagerBrowse`) merges directory listings built without manifest bodies.
+ * Those entries must not overwrite a full `listSkillsInRepo` index (description, triggers, skillFiles).
+ */
+function isBrowseListingStub(meta: SkillMeta): boolean {
+  return (
+    meta.description === undefined &&
+    meta.triggers === undefined &&
+    (meta.skillFiles === undefined || meta.skillFiles.length === 0)
+  );
+}
+
+function hasIndexedManifest(meta: SkillMeta): boolean {
+  return (
+    meta.description !== undefined ||
+    meta.triggers !== undefined ||
+    (meta.skillFiles !== undefined && meta.skillFiles.length > 0)
+  );
+}
+
+function mergeSkillMetaEntry(prev: SkillMeta, incoming: SkillMeta): SkillMeta {
+  if (isBrowseListingStub(incoming) && hasIndexedManifest(prev)) {
+    return prev;
+  }
+  return incoming;
 }
 
 export function buildSourceKey(sourceMode: "github-repo" | "custom-registry", sourceRepository: string, registryUrl: string): string {
@@ -60,7 +87,8 @@ export class SkillCatalogStore {
       map.set(meta.name, meta);
     }
     for (const meta of incoming) {
-      map.set(meta.name, meta);
+      const prev = map.get(meta.name);
+      map.set(meta.name, prev ? mergeSkillMetaEntry(prev, meta) : meta);
     }
     this.save(sourceKey, skillsRoot || existing?.skillsRoot || "", [...map.values()]);
   }

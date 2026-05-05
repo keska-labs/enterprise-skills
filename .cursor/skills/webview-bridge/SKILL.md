@@ -56,7 +56,13 @@ Errors in handlers are caught, logged, and surfaced as `{ type: "error", message
 
 3. **Send from React**: `useVsCodeApi().postMessage({ type: "yourAction", foo: "bar" })`.
 
-4. **Host → webview**: If the UI needs new push updates, extend `ExtensionMessage` and post from the host with `webview.postMessage(...)`. Existing examples: `setState`, `syncComplete`, `browseUpdate`, `catalogSearchResults`, `error`.
+4. **Host → webview**: If the UI needs new push updates, extend `ExtensionMessage` and post from the host with `webview.postMessage(...)`. Existing examples: `setState`, `syncComplete`, `browseUpdate`, `catalogSearchResults`, `recommendationsResult`, `error`.
+
+## Recommendations tab (reference)
+
+- Webview → host: `{ type: "tabChanged", tab: "manage" | "browse" | "recommended" }` (active tab), `{ type: "requestRecommendations" }` (refresh ranked skills).
+- Host → webview: `{ type: "recommendationsResult", recommendations: Recommendation[], catalogReady: boolean }`.
+- Handled in both panels; [`skillManagerRecommendations.ts`](src/panels/skillManagerRecommendations.ts) builds the payload via [`WorkspaceAnalyzer`](src/services/WorkspaceAnalyzer.ts) + [`SkillRecommender`](src/services/SkillRecommender.ts).
 
 ## Testing
 

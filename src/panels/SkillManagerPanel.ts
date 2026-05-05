@@ -5,9 +5,11 @@ import { RepoService } from "../services/RepoService";
 import { RegistryService } from "../services/RegistryService";
 import { SyncEngine } from "../services/SyncEngine";
 import { SkillCatalogStore } from "../services/SkillCatalogStore";
+import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
+import { buildRecommendationsPayload } from "./skillManagerRecommendations";
 import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
@@ -31,6 +33,7 @@ export class SkillManagerPanel {
     syncEngine: SyncEngine,
     logger: Logger,
     catalogStore: SkillCatalogStore,
+    workspaceAnalyzer: WorkspaceAnalyzer,
     configureSourceFn: typeof configureSource
   ): void {
     if (SkillManagerPanel.currentPanel) {
@@ -58,9 +61,12 @@ export class SkillManagerPanel {
       syncEngine,
       logger,
       catalogStore,
+      workspaceAnalyzer,
       configureSourceFn
     );
   }
+
+  private recommendedTabActive = false;
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -72,6 +78,7 @@ export class SkillManagerPanel {
     private readonly syncEngine: SyncEngine,
     private readonly logger: Logger,
     private readonly catalogStore: SkillCatalogStore,
+    private readonly workspaceAnalyzer: WorkspaceAnalyzer,
     private readonly configureSourceFn: typeof configureSource
   ) {
     this.panel = panel;
@@ -92,6 +99,9 @@ export class SkillManagerPanel {
     this.panel.webview.html = getSkillManagerWebviewHtml(this.panel.webview, this.extensionUri);
     this.syncEngine.onSyncComplete(() => {
       void this.postState();
+      if (this.recommendedTabActive) {
+        void this.sendRecommendations();
+      }
     });
   }
 
@@ -166,6 +176,28 @@ export class SkillManagerPanel {
         await this.postState();
         break;
       }
+      case "tabChanged": {
+        this.recommendedTabActive = message.tab === "recommended";
+        break;
+      }
+      case "requestRecommendations": {
+        await this.sendRecommendations();
+        break;
+      }
+    }
+  }
+
+  private async sendRecommendations(): Promise<void> {
+    try {
+      const payload = await buildRecommendationsPayload(this.workspaceAnalyzer, this.configService, this.catalogStore);
+      this.panel.webview.postMessage({ type: "recommendationsResult", ...payload });
+    } catch (error: unknown) {
+      this.logger.error("Recommendations failed", error);
+      this.panel.webview.postMessage({
+        type: "recommendationsResult",
+        recommendations: [],
+        catalogReady: false
+      });
     }
   }
 

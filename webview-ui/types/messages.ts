@@ -14,6 +14,15 @@ export interface SkillInfo {
   fileCount?: number;
 }
 
+export type RecommendationMatchKind = "strong" | "weak" | "general";
+
+export interface Recommendation {
+  skill: SkillInfo;
+  score: number;
+  reasons: string[];
+  matchKind: RecommendationMatchKind;
+}
+
 export interface CategoryData {
   name: string;
   skills: SkillInfo[];
@@ -46,6 +55,8 @@ export interface SkillManagerState {
   catalogSize: number;
 }
 
+export type SkillManagerMainTab = "manage" | "browse" | "recommended";
+
 export type WebviewMessage =
   | { type: "ready" }
   | { type: "connectRepo" }
@@ -55,7 +66,9 @@ export type WebviewMessage =
   | { type: "getState" }
   | { type: "loadBrowseRoot" }
   | { type: "expandBrowsePath"; path: string }
-  | { type: "searchCatalog"; query: string };
+  | { type: "searchCatalog"; query: string }
+  | { type: "requestRecommendations" }
+  | { type: "tabChanged"; tab: SkillManagerMainTab };
 
 export type ExtensionMessage =
   | { type: "setState"; payload: SkillManagerState }
@@ -73,4 +86,5 @@ export type ExtensionMessage =
   }
   | { type: "error"; message: string }
   | { type: "browseUpdate"; parentPath: string; entries: BrowseEntry[]; skillsRootPath?: string }
-  | { type: "catalogSearchResults"; query: string; skills: SkillInfo[] };
+  | { type: "catalogSearchResults"; query: string; skills: SkillInfo[] }
+  | { type: "recommendationsResult"; recommendations: Recommendation[]; catalogReady: boolean };

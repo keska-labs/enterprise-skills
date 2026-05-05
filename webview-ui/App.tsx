@@ -5,11 +5,19 @@ import { CategoryGroup } from "./components/CategoryGroup";
 import { EnabledEmptyCallout } from "./components/EnabledEmptyCallout";
 import { EmptyState } from "./components/EmptyState";
 import { Header } from "./components/Header";
-import { BrowseEntry, ExtensionMessage, SkillInfo, SkillManagerState } from "./types/messages";
+import { RecommendedSkillList } from "./components/RecommendedSkillList";
+import {
+  BrowseEntry,
+  ExtensionMessage,
+  Recommendation,
+  SkillInfo,
+  SkillManagerMainTab,
+  SkillManagerState
+} from "./types/messages";
 import "./styles/global.css";
+import "./styles/recommended.css";
 
 type LoadPhase = "loading" | "ready";
-type MainTab = "manage" | "browse";
 
 function BrowseTreeSkeleton(): React.JSX.Element {
   return (
@@ -25,7 +33,7 @@ export function App(): React.JSX.Element {
   const vscode = useVsCodeApi();
   const [phase, setPhase] = useState<LoadPhase>("loading");
   const [state, setState] = useState<SkillManagerState | null>(null);
-  const [mainTab, setMainTab] = useState<MainTab>("manage");
+  const [mainTab, setMainTab] = useState<SkillManagerMainTab>("manage");
   const [searchQuery, setSearchQuery] = useState("");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -38,6 +46,9 @@ export function App(): React.JSX.Element {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [catalogSearchResults, setCatalogSearchResults] = useState<SkillInfo[] | null>(null);
   const [catalogSearching, setCatalogSearching] = useState(false);
+  const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
+  const [recommendationsLoading, setRecommendationsLoading] = useState(false);
+  const [recCatalogReady, setRecCatalogReady] = useState(false);
 
   const prevSourceKey = useRef<string | null>(null);
   const stateRef = useRef<SkillManagerState | null>(null);
@@ -78,6 +89,10 @@ export function App(): React.JSX.Element {
       } else if (data.type === "catalogSearchResults") {
         setCatalogSearchResults(data.skills);
         setCatalogSearching(false);
+      } else if (data.type === "recommendationsResult") {
+        setRecommendations(data.recommendations);
+        setRecCatalogReady(data.catalogReady);
+        setRecommendationsLoading(false);
       }
     };
     window.addEventListener("message", handleMessage);
@@ -98,9 +113,30 @@ export function App(): React.JSX.Element {
       setCatalogQuery("");
       setBrowseTreeLoading(false);
       setCatalogSearching(false);
+      setRecommendations(null);
+      setRecCatalogReady(false);
+      setRecommendationsLoading(false);
     }
     prevSourceKey.current = key;
   }, [state?.sourceRepository, state?.sourceMode]);
+
+  useEffect(() => {
+    if (phase !== "ready") {
+      return;
+    }
+    vscode.postMessage({ type: "tabChanged", tab: mainTab });
+  }, [mainTab, phase, vscode]);
+
+  useEffect(() => {
+    if (phase !== "ready" || mainTab !== "recommended") {
+      return;
+    }
+    if (!state?.isConnected) {
+      return;
+    }
+    setRecommendationsLoading(true);
+    vscode.postMessage({ type: "requestRecommendations" });
+  }, [mainTab, phase, state?.isConnected, state?.sourceRepository, state?.sourceMode, vscode]);
 
   useEffect(() => {
     if (phase !== "ready" || mainTab !== "browse") {
@@ -215,12 +251,28 @@ export function App(): React.JSX.Element {
   );
 
   const onTabRowKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowRight" && mainTab === "manage") {
-      e.preventDefault();
-      setMainTab("browse");
-    } else if (e.key === "ArrowLeft" && mainTab === "browse") {
-      e.preventDefault();
-      setMainTab("manage");
+    if (e.key === "ArrowRight") {
+      if (mainTab === "manage") {
+        e.preventDefault();
+        setMainTab("browse");
+      } else if (mainTab === "browse") {
+        e.preventDefault();
+        setMainTab("recommended");
+      } else if (mainTab === "recommended") {
+        e.preventDefault();
+        setMainTab("manage");
+      }
+    } else if (e.key === "ArrowLeft") {
+      if (mainTab === "recommended") {
+        e.preventDefault();
+        setMainTab("browse");
+      } else if (mainTab === "browse") {
+        e.preventDefault();
+        setMainTab("manage");
+      } else if (mainTab === "manage") {
+        e.preventDefault();
+        setMainTab("recommended");
+      }
     }
   };
 
@@ -311,8 +363,53 @@ export function App(): React.JSX.Element {
             >
               Browse
             </button>
+            <button
+              type="button"
+              role="tab"
+              id="tab-recommended"
+              className={`tab-button${mainTab === "recommended" ? " active" : ""}`}
+              aria-selected={mainTab === "recommended"}
+              aria-controls="tab-panel-recommended"
+              onClick={() => setMainTab("recommended")}
+            >
+              Recommended
+            </button>
           </div>
-          {mainTab === "manage" ? (
+          {mainTab === "recommended" ? (
+            <div id="tab-panel-recommended" role="tabpanel" aria-labelledby="tab-recommended">
+              {recommendationsLoading ? (
+                <div className="recommended-loading" aria-busy="true">
+                  <div>Analyzing workspace and catalog…</div>
+                  <div className="recommended-loading-dots" aria-hidden>
+                    <span /><span /><span />
+                  </div>
+                </div>
+              ) : !recCatalogReady ? (
+                <section className="callout-card callout-card--subtle">
+                  <div className="callout-body">
+                    <h2 className="callout-title">Catalog not ready</h2>
+                    <p className="callout-text">
+                      Run a sync (or open Browse once) so skills are cached from your source. Then open this tab again.
+                    </p>
+                    <button type="button" className="button cta-button callout-cta" onClick={onSyncNow}>
+                      Sync now
+                    </button>
+                  </div>
+                </section>
+              ) : recommendations && recommendations.length === 0 ? (
+                <p className="recommended-empty">
+                  No recommendations yet for this workspace. Try <strong>Sync now</strong> to refresh the catalog, use{" "}
+                  <strong>Browse</strong> to explore, or enable skills from <strong>Manage</strong>.
+                </p>
+              ) : recommendations ? (
+                <RecommendedSkillList
+                  recommendations={recommendations}
+                  optedInSkills={state?.optedInSkills ?? []}
+                  onToggle={onToggle}
+                />
+              ) : null}
+            </div>
+          ) : mainTab === "manage" ? (
             <div id="tab-panel-manage" role="tabpanel" aria-labelledby="tab-manage">
               {hasManageTabSkills ? (
                 <>

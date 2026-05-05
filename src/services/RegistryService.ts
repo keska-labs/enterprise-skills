@@ -1,7 +1,7 @@
 import axios, { AxiosInstance } from "axios";
 import { AuthService } from "./AuthService";
 import { ConfigService } from "./ConfigService";
-import { SkillContent, SkillMeta } from "../types";
+import { SkillContent, SkillMeta, SkillTriggers } from "../types";
 import { ServiceError, toServiceError } from "./ServiceError";
 
 interface RegistrySkill {
@@ -10,6 +10,7 @@ interface RegistrySkill {
   description?: string;
   version: string;
   category?: string;
+  triggers?: SkillTriggers;
 }
 
 export class RegistryService {
@@ -65,7 +66,8 @@ export class RegistryService {
         category: skill.category ?? "Uncategorized",
         shaOrVersion: skill.version,
         path: skill.id,
-        skillType: "cursor-rule" as const  // registry skills are single-file rules
+        skillType: "cursor-rule" as const, // registry skills are single-file rules
+        triggers: skill.triggers
       }));
     } catch (error) {
       throw toServiceError(error, "Failed to load skills from the custom registry.");

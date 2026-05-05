@@ -2,6 +2,7 @@ import axios, { AxiosInstance } from "axios";
 import { AuthService } from "./AuthService";
 import { RepoInfo, SkillContent, SkillMeta, SkillType } from "../types";
 import { ServiceError, toServiceError } from "./ServiceError";
+import { parseSkillMdFrontmatter } from "../utils/skillMdFrontmatter";
 
 interface GitHubRepoResponse {
   id: number;
@@ -42,71 +43,8 @@ interface GitHubTreeResponse {
   tree: GitHubTreeItem[];
 }
 
-/** Parsed fields from a SKILL.md YAML frontmatter block. */
-interface SkillManifest {
-  name?: string;
-  description?: string;
-  /** Arbitrary key-value map from the `metadata:` block. */
-  metadata?: Record<string, string>;
-}
-
-/**
- * Parse the YAML frontmatter from a SKILL.md file.
- * Handles the subset of YAML used by the Agent Skills spec:
- *   - Top-level scalar fields (name, description, license, compatibility, …)
- *   - A nested `metadata:` mapping with string values (version, category, author, …)
- * Does NOT require a YAML library; the spec keeps frontmatter deliberately simple.
- */
-function parseSkillMdFrontmatter(content: string): SkillManifest {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  if (!match) {
-    return {};
-  }
-  const lines = match[1].split(/\r?\n/);
-  const result: SkillManifest = {};
-  let inMetadata = false;
-  const meta: Record<string, string> = {};
-
-  for (const line of lines) {
-    // Blank lines are ok
-    if (!line.trim()) {
-      continue;
-    }
-    // Start of the `metadata:` block
-    if (/^metadata:\s*$/.test(line)) {
-      inMetadata = true;
-      continue;
-    }
-    // Indented key under `metadata:`
-    if (inMetadata && /^\s{2}/.test(line)) {
-      const m = line.match(/^\s{2}([\w-]+):\s*"?([^"]*)"?\s*$/);
-      if (m) {
-        meta[m[1]] = m[2].trim();
-      }
-      continue;
-    }
-    // Any non-indented line ends the metadata block
-    inMetadata = false;
-    // Top-level scalar: `key: value`
-    const top = line.match(/^([\w-]+):\s*(.+)$/);
-    if (top) {
-      const key = top[1];
-      const value = top[2].replace(/^["']|["']$/g, "").trim();
-      if (key === "name") {
-        result.name = value;
-      } else if (key === "description") {
-        result.description = value;
-      }
-    }
-  }
-
-  if (Object.keys(meta).length > 0) {
-    result.metadata = meta;
-  }
-  return result;
-}
-
 const CONCURRENT_MANIFEST_FETCHES = 5;
+const MAX_STANDALONE_RULE_FRONTMATTER_FETCHES = 35;
 
 export class RepoService {
   private readonly client: AxiosInstance;
@@ -398,6 +336,8 @@ export class RepoService {
       headers
     );
 
+    await this.enrichStandaloneCursorRulesWithTriggers(owner, repo, cursorRuleMetas, headers);
+
     const metas = [...cursorRuleMetas, ...skillPackageMetas];
     metas.sort((a, b) => a.name.localeCompare(b.name));
     return metas;
@@ -417,7 +357,7 @@ export class RepoService {
       const batch = manifests.slice(i, i + CONCURRENT_MANIFEST_FETCHES);
       const batchResults = await Promise.all(
         batch.map(async ({ dirPath, sha }) => {
-          let parsed: SkillManifest = {};
+          let parsed: ReturnType<typeof parseSkillMdFrontmatter> = {};
           try {
             const blobRes = await this.client.get<{ content: string; encoding: string }>(
               `/repos/${owner}/${repo}/git/blobs/${sha}`,
@@ -444,7 +384,8 @@ export class RepoService {
             path: dirPath,
             shaOrVersion: sha,
             skillType: "skill" as const,
-            skillFiles: files
+            skillFiles: files,
+            triggers: parsed.triggers
           };
         })
       );
@@ -452,6 +393,49 @@ export class RepoService {
     }
 
     return results;
+  }
+
+  /**
+   * Fetch small rule blobs to read YAML frontmatter for triggers (capped).
+   */
+  private async enrichStandaloneCursorRulesWithTriggers(
+    owner: string,
+    repo: string,
+    cursorRuleMetas: SkillMeta[],
+    headers: Record<string, string>
+  ): Promise<void> {
+    const targets = cursorRuleMetas.filter((m) => {
+      const leaf = m.path?.split("/").pop() ?? "";
+      return /\.(md|mdc)$/i.test(leaf);
+    });
+    const capped = targets.slice(0, MAX_STANDALONE_RULE_FRONTMATTER_FETCHES);
+
+    for (let i = 0; i < capped.length; i += CONCURRENT_MANIFEST_FETCHES) {
+      const batch = capped.slice(i, i + CONCURRENT_MANIFEST_FETCHES);
+      await Promise.all(
+        batch.map(async (meta) => {
+          try {
+            const blobRes = await this.client.get<{ content: string; encoding: string }>(
+              `/repos/${owner}/${repo}/git/blobs/${meta.shaOrVersion}`,
+              { headers }
+            );
+            const raw = Buffer.from(blobRes.data.content, "base64").toString("utf8");
+            const parsed = parseSkillMdFrontmatter(raw);
+            if (parsed.name) {
+              meta.name = parsed.name;
+            }
+            if (parsed.description) {
+              meta.description = parsed.description;
+            }
+            if (parsed.triggers) {
+              meta.triggers = parsed.triggers;
+            }
+          } catch {
+            // ignore per-file failures
+          }
+        })
+      );
+    }
   }
 
   private async resolveSkillsPath(

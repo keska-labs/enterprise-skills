@@ -9,9 +9,19 @@ export interface RepoInfo {
 
 /**
  * `cursor-rule` — a single `.mdc` / `.md` file synced to `.cursor/rules/<name>.mdc`.
- * `skill`       — a directory package with a `skill.json` manifest synced to `.cursor/skills/<name>/`.
+ * `skill`       — a directory package with `SKILL.md` synced to `.cursor/skills/<name>/`.
  */
 export type SkillType = "cursor-rule" | "skill";
+
+/** Optional workspace hints for recommendations (`metadata.triggers` in SKILL.md / registry). */
+export interface SkillTriggers {
+  languages?: string[];
+  files?: string[];
+  dependencies?: string[];
+  extensions?: string[];
+  keywords?: string[];
+  generalPurpose?: boolean;
+}
 
 export interface SkillMeta {
   name: string;
@@ -23,6 +33,7 @@ export interface SkillMeta {
   skillType: SkillType;
   /** For skill packages: absolute repo paths of all files within the package directory. */
   skillFiles?: string[];
+  triggers?: SkillTriggers;
 }
 
 export interface SkillContent {

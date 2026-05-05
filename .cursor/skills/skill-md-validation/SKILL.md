@@ -20,16 +20,17 @@ Standalone blobs under the skills root with extensions **`.md`, `.mdc`, `.yaml`,
 
 ## Frontmatter parsing
 
-[`parseSkillMdFrontmatter`](src/services/RepoService.ts) reads the first YAML block between `---` lines. Supported subset:
+[`parseSkillMdFrontmatter`](src/utils/skillMdFrontmatter.ts) reads the first YAML block between `---` lines. Supported subset:
 
 - Top-level scalars: **`name`**, **`description`** (simple `key: value` lines).
 - Nested **`metadata:`** block with **two-space-indented** keys (string values only)—used for **`version`** and **`category`** when present.
+- Optional **`metadata.triggers:`** block with **four-space-indented** keys: **`languages`**, **`files`**, **`dependencies`**, **`extensions`**, **`keywords`** (comma-separated lists; scoped npm names may be quoted), and **`generalPurpose`** (`true` / `false`). Lists are lowercased when stored except file path tokens.
 
 It does **not** load a full YAML parser; keep manifests within that subset or metadata may be ignored.
 
 ## Manifest → `SkillMeta`
 
-From [`fetchSkillManifests`](src/services/RepoService.ts):
+From [`fetchSkillManifests`](src/services/RepoService.ts) / standalone cursor-rule enrichment:
 
 | Field | Source |
 | --- | --- |
@@ -40,6 +41,7 @@ From [`fetchSkillManifests`](src/services/RepoService.ts):
 | `path` | Package directory path in repo |
 | `skillType` | Always `"skill"` |
 | `skillFiles` | All blob paths under the package dir |
+| `triggers` | Parsed `metadata.triggers` when present |
 
 ## Workspace writes
 

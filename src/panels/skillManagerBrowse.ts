@@ -35,6 +35,8 @@ function toBrowseEntries(
  * At browse time we only have directory entries, not file contents, so
  * directories are optimistically tagged as "skill"; the full git-tree scan
  * in RepoService confirms the type by detecting the SKILL.md file.
+ * [`SkillCatalogStore.merge`](src/services/SkillCatalogStore.ts) keeps existing
+ * indexed rows (description, triggers, skillFiles) when these browse stubs would overwrite them.
  */
 function skillFileMetas(
   repoService: RepoService,
