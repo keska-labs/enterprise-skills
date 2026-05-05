@@ -10,11 +10,14 @@ import { SkillManagerPanel } from "./panels/SkillManagerPanel";
 import { SkillManagerSidebarProvider } from "./panels/SkillManagerSidebarProvider";
 import { SkillCatalogStore } from "./services/SkillCatalogStore";
 import { CatalogService } from "./services/CatalogService";
+import { MultiSourceCatalogService } from "./services/MultiSourceCatalogService";
 import { SourceProviderRegistry } from "./services/SourceProviderRegistry";
 import { WorkspaceAnalyzer } from "./services/WorkspaceAnalyzer";
 import { LlmRecommendationCache } from "./services/LlmRecommendationCache";
 import { LlmSkillRecommender } from "./services/LlmSkillRecommender";
 import { maybeShowConfigurePrompt } from "./utils/welcomePrompt";
+import { migrateOptedInSkillsIfNeeded } from "./services/optedInMigration";
+import { migrateWorkspaceLayoutIfNeeded } from "./utils/workspaceLayoutMigration";
 
 let syncEngineRef: SyncEngine | undefined;
 let loggerRef: Logger | undefined;
@@ -34,14 +37,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const catalogStore = new SkillCatalogStore(context.globalState);
   const providerRegistry = new SourceProviderRegistry(repoService, registryService);
   const catalogService = new CatalogService(catalogStore, providerRegistry);
+  const multiSourceService = new MultiSourceCatalogService(catalogService, logger);
   const workspaceAnalyzer = new WorkspaceAnalyzer();
   const llmRecommendationCache = new LlmRecommendationCache(context.globalState);
   const llmSkillRecommender = new LlmSkillRecommender(context.secrets, configService, llmRecommendationCache, logger);
+
+  // Best-effort migrations from the single-source era. Safe to run on every
+  // activation: each helper guards itself with a flag in global/workspace state.
+  try {
+    await configService.migrateLegacySourcesIfNeeded(context.globalState);
+    await migrateOptedInSkillsIfNeeded(configService, context.workspaceState);
+    await migrateWorkspaceLayoutIfNeeded(configService, context.workspaceState, logger);
+  } catch (error) {
+    logger.error("Multi-source migration failed", error);
+  }
+
   const syncEngine = new SyncEngine(
     authService,
     configService,
     logger,
-    catalogService
+    catalogService,
+    multiSourceService
   );
   const sidebarProvider = new SkillManagerSidebarProvider(
     context.extensionUri,
@@ -52,6 +68,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger,
     catalogStore,
     catalogService,
+    multiSourceService,
     workspaceAnalyzer,
     llmSkillRecommender
   );
@@ -66,6 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     repoService,
     syncEngine,
     logger,
+    catalogStore,
     () => {
       void sidebarProvider.focus().catch(() => {
         SkillManagerPanel.render(
@@ -77,6 +95,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           logger,
           catalogStore,
           catalogService,
+          multiSourceService,
           workspaceAnalyzer,
           llmSkillRecommender,
           configureSource
@@ -98,7 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(statusBarItem);
   context.subscriptions.push(syncEngine, { dispose: () => logger.dispose() });
   syncEngine.startScheduler();
-  if (configService.isSourceConfigured()) {
+  if (configService.hasAnyConfiguredSource()) {
     void syncEngine.sync(false);
   } else {
     void maybeShowConfigurePrompt(context, configService, syncEngine);
