@@ -1,6 +1,7 @@
 import { SkillMeta } from "../types";
 import { Recommendation, SkillInfo } from "../../webview-ui/types/messages";
 import { WorkspaceProfile } from "./WorkspaceAnalyzer";
+import { compositeSkillKey } from "../utils/sources";
 
 const STRONG_STEP = 25;
 const STRONG_CAP = 75;
@@ -35,13 +36,18 @@ export function globMatchesPattern(pattern: string, relativePathLower: string, b
 }
 
 export function skillMetaToSkillInfo(meta: SkillMeta): SkillInfo {
+  const label = meta.source?.label ?? "";
   return {
+    compositeKey: compositeSkillKey(label, meta.name),
     name: meta.name,
     description: meta.description ?? "",
     version: meta.version ?? meta.shaOrVersion.slice(0, 7),
     category: meta.category ?? "",
     skillType: meta.skillType,
-    fileCount: meta.skillFiles?.length
+    fileCount: meta.skillFiles?.length,
+    source: meta.source
+      ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
+      : undefined
   };
 }
 
@@ -109,7 +115,8 @@ export function recommend(profile: WorkspaceProfile, metas: SkillMeta[], optedIn
   const results: Recommendation[] = [];
 
   for (const meta of metas) {
-    if (opted.has(meta.name)) {
+    const composite = meta.source ? compositeSkillKey(meta.source.label, meta.name) : "";
+    if (opted.has(meta.name) || (composite && opted.has(composite))) {
       continue;
     }
 
