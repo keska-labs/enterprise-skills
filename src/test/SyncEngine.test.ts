@@ -197,6 +197,67 @@ describe("SyncEngine", () => {
     expect(catalogService.getContent).toHaveBeenCalledTimes(1);
   });
 
+  it("populates staleSources when a source serves cached catalog and keeps status success", async () => {
+    jest.spyOn(fileUtils, "writeSkillFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
+    jest.spyOn(fileUtils, "listExistingSkillPackages").mockResolvedValue([]);
+    jest.spyOn(fileUtils, "deleteSkillFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "deleteSkillPackage").mockResolvedValue(undefined);
+
+    const sources = [makeSource("repo")];
+    const auth = { getToken: jest.fn().mockResolvedValue("token") } as unknown as AuthService;
+    const config = {
+      getOptedInSkills: jest.fn().mockReturnValue([compositeSkillKey("repo", "skill-a")]),
+      getResolvedSources: jest.fn().mockReturnValue(sources),
+      hasAnyConfiguredSource: jest.fn().mockReturnValue(true)
+    } as unknown as ConfigService;
+    const catalogService = {
+      getContent: jest.fn().mockResolvedValue({ content: "body", shaOrVersion: "abc1234" })
+    } as unknown as CatalogService;
+
+    const stamped: SkillMeta = {
+      name: "skill-a",
+      path: "skills/skill-a.mdc",
+      shaOrVersion: "abc1234",
+      skillType: "cursor-rule",
+      source: { type: sources[0].type, value: sources[0].value, label: sources[0].label, sourceKey: sources[0].sourceKey }
+    };
+    const retryAt = new Date("2030-01-01T00:00:00Z").toISOString();
+    const multi = {
+      getMergedCatalog: jest.fn().mockResolvedValue({
+        metas: [stamped],
+        perSource: [
+          {
+            source: sources[0],
+            snapshot: {
+              skillsRoot: "skills",
+              metas: [stamped],
+              isStale: true,
+              staleReason: "rate_limited",
+              retryAt
+            },
+            stale: true,
+            staleReason: "rate_limited",
+            retryAt
+          }
+        ],
+        byCompositeKey: new Map([[compositeSkillKey("repo", "skill-a"), stamped]])
+      })
+    } as unknown as MultiSourceCatalogService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+
+    const engine = new SyncEngine(auth, config, logger, catalogService, multi);
+    const result = await engine.sync(true);
+
+    expect(result.status).toBe("success");
+    expect(result.staleSources).toHaveLength(1);
+    expect(result.staleSources[0]).toEqual({
+      label: "repo",
+      reason: "rate_limited",
+      retryAt
+    });
+  });
+
   it("dispatches per-source content fetches and writes namespaced files for multi-source", async () => {
     const writeFile = jest.spyOn(fileUtils, "writeSkillFile").mockResolvedValue(undefined);
     jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);

@@ -6,6 +6,7 @@ import { SyncEngine } from "../services/SyncEngine";
 import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { Logger } from "../utils/logger";
 import { RepoInfo, SourceConfig, SyncResult } from "../types";
+import { formatStaleSources } from "../utils/staleSources";
 import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
 import { deriveSourceLabel, sourceTypeLabel } from "../utils/sources";
 import {
@@ -520,6 +521,15 @@ function showSyncOutcome(result: SyncResult, logger: Logger, label: string): voi
   };
 
   if (result.status === "success") {
+    if (result.staleSources.length > 0) {
+      void vscode.window
+        .showWarningMessage(
+          `${label} used cached catalog for ${formatStaleSources(result.staleSources)}.`,
+          "View Logs"
+        )
+        .then(handleChoice);
+      return;
+    }
     vscode.window.showInformationMessage(`${label} completed. ${result.message}`);
     return;
   }

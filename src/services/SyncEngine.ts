@@ -19,6 +19,7 @@ import { CatalogService } from "./CatalogService";
 import { MultiSourceCatalogService } from "./MultiSourceCatalogService";
 import { writeWorkspaceCatalogManifest } from "../utils/catalogManifest";
 import { compositeSkillKey, parseCompositeSkillKey } from "../utils/sources";
+import { formatStaleSources } from "../utils/staleSources";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
@@ -28,6 +29,8 @@ export class SyncEngine implements vscode.Disposable {
   private readonly skillShaCache = new Map<string, string>();
   private readonly syncEventEmitter = new vscode.EventEmitter<SyncResult>();
   private lastBackgroundFailureReason: SyncFailureReason = "none";
+  /** Sentinel string for the dedupe of stale-cache toasts in background syncs. */
+  private lastBackgroundStaleSignature = "";
   private lastResult = this.createResult("skipped", "unknown", "Sync has not run yet.");
   private lastSyncTime?: Date;
 
@@ -115,6 +118,13 @@ export class SyncEngine implements vscode.Disposable {
             firstAuthReason = perSource.errorReason;
             firstAuthMessage = perSource.error;
           }
+        }
+        if (perSource.stale) {
+          result.staleSources.push({
+            label: perSource.source.label,
+            reason: perSource.staleReason ?? "unknown",
+            retryAt: perSource.retryAt
+          });
         }
       }
 
@@ -322,7 +332,8 @@ export class SyncEngine implements vscode.Disposable {
       timestamp: new Date().toISOString(),
       updated: [],
       deleted: [],
-      errors: []
+      errors: [],
+      staleSources: []
     };
   }
 
@@ -377,6 +388,35 @@ export class SyncEngine implements vscode.Disposable {
     }
 
     this.lastBackgroundFailureReason = "none";
+
+    // Successful sync that fell back to cached catalogs — let the user know
+    // once per condition (so we don't re-toast every 4h while rate-limited).
+    if (result.staleSources.length > 0) {
+      const signature = this.staleSignature(result);
+      if (signature !== this.lastBackgroundStaleSignature) {
+        this.lastBackgroundStaleSignature = signature;
+        void vscode.window
+          .showWarningMessage(
+            `Skill sync used cached catalog for ${formatStaleSources(result.staleSources)}.`,
+            "View Logs"
+          )
+          .then((choice) => {
+            if (choice === "View Logs") {
+              this.logger.show();
+            }
+          });
+      }
+      return;
+    }
+
+    this.lastBackgroundStaleSignature = "";
+  }
+
+  private staleSignature(result: SyncResult): string {
+    return result.staleSources
+      .map((s) => `${s.label}|${s.reason}|${s.retryAt ?? ""}`)
+      .sort()
+      .join(",");
   }
 }
 
