@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0
+
+- **`owner/repo` source labels:** GitHub sources default to the full `owner/repo` (e.g. `keska-labs/skills`) instead of just the repo segment, so two repos with the same name from different owners no longer collide. `/` is preserved in the workspace layout, producing nested folders like `.cursor/rules/keska-labs/skills/<name>.mdc` that read naturally.
+- **Recursive skill discovery:** GitHub sources are now scanned recursively across the entire repo — `SKILL.md` packages and `.mdc` rules are picked up at any depth, and `.md` / `.yaml` / `.yml` files are detected inside `rules/`, `skills/`, `.skills/`. Standard build/IDE/vendor folders are skipped (`.cursor/`, `node_modules/`, `dist/`, `build/`, `.git/`, `.github/`, `.venv/`, `.terraform/`, …) so the extension never re-imports a downstream consumer's synced files. Repos no longer need a fixed top-level layout.
+- **Add-source UX:** the GitHub picker now leads with **"Enter owner/repo manually..."** so you can add any public or accessible private repo (e.g. `VoltAgent/awesome-agent-skills`) without it appearing in your own repo list. The custom-registry input also rejects `github.com` URLs and steers users to the GitHub source type instead.
+- **Multi-source catalog:** configure any number of skill sources via the new `skillSync.sources` array — mix and match GitHub repositories and custom HTTPS registries. Catalogs from every source are fetched in parallel and merged into a single Skill Manager view. Per-source errors no longer block the rest of the catalog.
+- **Per-skill source badges:** every row in Manage, Browse, Search, and Recommended now shows the originating source (label + type) so duplicate-named skills from different repos stay distinguishable.
+- **Namespaced workspace layout:** synced files now land under `.cursor/rules/<source-label>/<name>.mdc` and `.cursor/skills/<source-label>/<name>/`. The label is auto-derived (repo segment for GitHub, hostname for registries) and can be overridden per source.
+- **Automatic migrations:** existing single-source workspaces are migrated transparently on first activation — legacy `skillSync.sourceMode` / `sourceRepository` / `registryUrl` settings are folded into `skillSync.sources`, opted-in skill names are rewritten to `<label>/<name>` composite keys, and existing flat `.cursor/rules`/`.cursor/skills` files are moved into the new namespaced folder. The legacy keys remain readable for one release as a deprecated fallback.
+- **New commands:** `Skill Sync: Add Skill Source` (guided picker) and `Skill Sync: Remove Skill Source`. The previous `Configure Source` command now appends instead of replacing.
+- **Recommendations across sources:** the LLM recommendation cache key, prompt, and result payloads now include the source label so the model can disambiguate same-named skills, and the cache is keyed by the full set of configured sources.
+
 ## 0.6.0
 
 - **Smart recommendations:** the Recommended tab tries LLM ranking in order (`vscode.lm` → Cursor SDK → OpenAI → Anthropic), then falls back to keyword/trigger heuristics. Results are TTL-cached per workspace; use **Refresh** to bypass cache. Optional commands store API keys in Secret Storage (`Skill Sync: Set … Recommendation Key`, **Clear Recommendation API Keys**). Settings live under `skillSync.recommendations.*`.

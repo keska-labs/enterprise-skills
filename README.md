@@ -1,6 +1,6 @@
 # Agent Skill Sync
 
-Sync agent skills from **private or public GitHub repositories** or a **custom registry** into your workspace. Enabled items are written under **`.cursor/rules`** (single-file rules) and **`.cursor/skills`** (skill packages). The Skill Manager gives you progressive browse, catalog search, and one-click enable or disable.
+Sync agent skills from **one or many** private or public GitHub repositories and custom registries into your workspace. Configure as many sources as you need — their catalogs are merged into a single Skill Manager view, and synced files land under **`.cursor/rules/<source-label>/`** and **`.cursor/skills/<source-label>/`** so the same skill name from different sources can co-exist. The Skill Manager gives you progressive browse, catalog search, and one-click enable or disable.
 
 Works with **VS Code 1.85+** and **Cursor**.
 
@@ -11,8 +11,8 @@ Works with **VS Code 1.85+** and **Cursor**.
 1. Install **Agent Skill Sync** from the marketplace (publisher **KeskaLabsAB**).
 2. Open the **Skills** activity bar view (or use **Skill Sync: Manage AI Skills** from the Command Palette).
 3. Sign in to GitHub when prompted if you use a private repository.
-4. Choose your source: connect **`owner/repo`** for GitHub, or switch to custom registry mode and set the registry URL in settings.
-5. On the **Manage** tab, turn on the skills you want. Use **Sync** or wait for background sync so files appear under `.cursor/rules` and `.cursor/skills`.
+4. Choose your sources: run **Skill Sync: Add Skill Source** and add as many GitHub repos (`owner/repo`) and/or custom registry URLs as you need — each source can be added, removed, or labelled independently.
+5. On the **Manage** tab, turn on the skills you want. Use **Sync** or wait for background sync so files appear under `.cursor/rules/<source-label>/` and `.cursor/skills/<source-label>/`. Each row shows a badge with its source so duplicate names from different repos stay distinguishable.
 
 ---
 
@@ -74,18 +74,25 @@ Cursor expects the manifest at **`.cursor-plugin/plugin.json`** and agent files 
 
 ## How a GitHub skills repo is laid out
 
-The extension looks for skills under the first folder that exists, in this order: **repository root** (for dedicated skills repos), then **`skills`**, **`.skills`**, **`rules`**, **`.cursor/rules`**.
+The extension recursively scans the repository and picks up:
+
+- **Skill packages**: any directory containing a `SKILL.md` file ([agentskills.io](https://agentskills.io/specification) standard) — anywhere in the tree.
+- **Cursor rules**: `.mdc` files anywhere in the tree (the `.mdc` extension is Cursor-specific, so it's a strong signal); plus `.md` / `.yaml` / `.yml` files inside known rule folders (`rules/`, `skills/`, `.skills/`).
 
 Example:
 
 ```
 your-skills-repo/
-├── api-documentation/          ← skill package
-│   ├── SKILL.md                ← required (see agentskills.io)
+├── api-documentation/          ← skill package (SKILL.md anywhere is enough)
+│   ├── SKILL.md
 │   └── …
-├── commit-message-style.mdc    ← Cursor rule
-└── security-code-review.md     ← Cursor rule
+├── commit-message-style.mdc    ← Cursor rule (.mdc at any depth)
+├── rules/
+│   └── security-code-review.md ← Cursor rule (`.md` inside rules/)
+└── README.md                   ← ignored — not in a rule folder, not .mdc
 ```
+
+The following paths are skipped to avoid picking up the consuming workspace's own files or build artifacts: `.cursor/`, `.git/`, `.github/`, `.vscode/`, `.idea/`, `node_modules/`, `vendor/`, `dist/`, `build/`, `out/`, `target/`, `coverage/`, `.venv/`, `__pycache__/`, `.terraform/`, and similar.
 
 **Skill packages** need a `SKILL.md` with YAML frontmatter, for example:
 
@@ -120,13 +127,30 @@ Focuses the Skill Manager sidebar. Change it under **Keyboard Shortcuts** — se
 
 | Setting | Purpose |
 | --- | --- |
-| `skillSync.sourceMode` | `github-repo` (default) or `custom-registry` |
-| `skillSync.sourceRepository` | GitHub repo as `owner/repo` |
-| `skillSync.registryUrl` | Base URL when using a custom registry |
-| `skillSync.categories` | Category names for registry mode |
-| `skillSync.optedInSkills` | Names of skills currently enabled for sync |
+| `skillSync.sources` | Ordered list of skill sources. Each entry is `{ "type": "github-repo" \| "custom-registry", "value": "owner/repo or https://registry", "label": "optional-prefix" }`. Catalogs from every source are fetched in parallel and merged. |
+| `skillSync.categories` | Category names for registry-mode sources |
+| `skillSync.optedInSkills` | Composite identifiers (`<source-label>/<skill-name>`) currently enabled for sync |
+| `skillSync.sourceMode` *(deprecated)* | Legacy single-source mode; auto-migrated into `skillSync.sources` on first activation |
+| `skillSync.sourceRepository` *(deprecated)* | Legacy GitHub repo; auto-migrated into `skillSync.sources` |
+| `skillSync.registryUrl` *(deprecated)* | Legacy registry URL; auto-migrated into `skillSync.sources` |
 
-Open **Settings** and search for **Agent Skill Sync** to edit these, or use **Preferences: Open User Settings (JSON)**.
+Open **Settings** and search for **Agent Skill Sync** to edit these, or use **Preferences: Open User Settings (JSON)**. Use the **Add Skill Source** / **Remove Skill Source** commands for a guided flow.
+
+### Multi-source layout
+
+Skills are written under namespaced folders so the same skill name can co-exist across different sources:
+
+```
+.cursor/
+  rules/
+    <source-label>/<skill-name>.mdc
+  skills/
+    <source-label>/<skill-name>/
+      SKILL.md
+      ...
+```
+
+The `<source-label>` is auto-derived from each source (the GitHub repo segment, or the registry hostname) and can be overridden via the optional `label` field. On first activation after upgrading from a single-source workspace, the extension migrates legacy flat files into the new layout automatically.
 
 ---
 
