@@ -5,23 +5,27 @@ import { Logger } from "../utils/logger";
 import {
   deleteSkillFile,
   deleteSkillPackage,
+  ExistingSkillFile,
+  ExistingSkillPackage,
   listExistingSkillFiles,
   listExistingSkillPackages,
   normalizeSkillName,
   writeSkillFile,
   writeSkillPackageFile
 } from "../utils/fileUtils";
-import { SkillMeta, SyncFailureReason, SyncResult, SyncStatus } from "../types";
+import { ResolvedSource, SkillMeta, SyncFailureReason, SyncResult, SyncStatus } from "../types";
 import { ServiceError } from "./ServiceError";
-import { currentSourceKey } from "./SkillCatalogStore";
 import { CatalogService } from "./CatalogService";
+import { MultiSourceCatalogService } from "./MultiSourceCatalogService";
 import { writeWorkspaceCatalogManifest } from "../utils/catalogManifest";
+import { compositeSkillKey, parseCompositeSkillKey } from "../utils/sources";
 
 const FOUR_HOURS_MS = 4 * 60 * 60 * 1000;
 
 export class SyncEngine implements vscode.Disposable {
   private intervalHandle?: NodeJS.Timeout;
-  private readonly skillShaCache = new Map<string, Map<string, string>>();
+  /** Composite key (`<sourceLabel>/<name>`) → last synced sha. Source-scoped via the label prefix. */
+  private readonly skillShaCache = new Map<string, string>();
   private readonly syncEventEmitter = new vscode.EventEmitter<SyncResult>();
   private lastBackgroundFailureReason: SyncFailureReason = "none";
   private lastResult = this.createResult("skipped", "unknown", "Sync has not run yet.");
@@ -31,7 +35,8 @@ export class SyncEngine implements vscode.Disposable {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly logger: Logger,
-    private readonly catalogService: CatalogService
+    private readonly catalogService: CatalogService,
+    private readonly multiSourceService: MultiSourceCatalogService
   ) {}
 
   public readonly onSyncComplete = this.syncEventEmitter.event;
@@ -58,7 +63,7 @@ export class SyncEngine implements vscode.Disposable {
   public async sync(isManual: boolean): Promise<SyncResult> {
     const result = this.createResult("skipped", "unknown", "Sync did not run.");
 
-    if (!isManual && !this.configService.isSourceConfigured()) {
+    if (!isManual && !this.configService.hasAnyConfiguredSource()) {
       result.reason = "source_invalid";
       result.message = "Skill source is not configured; background sync skipped.";
       this.emitResult(result, isManual);
@@ -87,78 +92,109 @@ export class SyncEngine implements vscode.Disposable {
       return result;
     }
 
-    const optedInSkills = this.configService.getOptedInSkills();
-    const sourceKey = currentSourceKey(this.configService);
-    let catalogSnapshotForManifest: SkillMeta[] | undefined;
+    const sources = this.configService.getResolvedSources();
+    const optedIn = this.configService.getOptedInSkills();
+    let mergedMetasForManifest: SkillMeta[] | undefined;
+    const firstSource: ResolvedSource | undefined = sources[0];
 
     try {
-      const skillIndex = (await this.catalogService.getCatalog(sourceKey, { forceRefresh: isManual })).metas;
-      catalogSnapshotForManifest = skillIndex;
+      const merged = await this.multiSourceService.getMergedCatalog(sources, { forceRefresh: isManual });
+      mergedMetasForManifest = merged.metas;
 
-      const indexByName = new Map(skillIndex.map((skill) => [skill.name, skill]));
-      const sourceShaCache = this.getSourceShaCache(sourceKey);
+      // Track whether any source needs auth so we can surface the most
+      // actionable failure reason later (instead of a generic "unknown").
+      let firstAuthReason: SyncFailureReason | undefined;
+      let firstAuthMessage: string | undefined;
+      for (const perSource of merged.perSource) {
+        if (perSource.error) {
+          result.errors.push(`Source ${perSource.source.label} failed: ${perSource.error}`);
+          if (
+            !firstAuthReason &&
+            (perSource.errorReason === "auth_expired" || perSource.errorReason === "no_session")
+          ) {
+            firstAuthReason = perSource.errorReason;
+            firstAuthMessage = perSource.error;
+          }
+        }
+      }
 
-      for (const skillName of optedInSkills) {
-        const meta = indexByName.get(skillName);
-        if (!meta || !meta.path) {
-          result.errors.push(`Skill ${skillName} not found in upstream.`);
+      const sourceByLabel = new Map(sources.map((s) => [s.label, s]));
+      const targets = resolveOptedInTargets(optedIn, merged.byCompositeKey, sources);
+
+      for (const target of targets) {
+        if (!target.meta || !target.meta.path) {
+          result.errors.push(`Skill ${target.compositeKey} not found in upstream.`);
+          continue;
+        }
+        const source = target.meta.source ? sourceByLabel.get(target.meta.source.label) : sourceByLabel.get(target.label);
+        if (!source) {
+          result.errors.push(`Source for skill ${target.compositeKey} is no longer configured.`);
           continue;
         }
 
-        const previousSha = sourceShaCache.get(skillName);
-        if (previousSha === meta.shaOrVersion) {
+        const previousSha = this.skillShaCache.get(target.compositeKey);
+        if (previousSha === target.meta.shaOrVersion) {
           continue;
         }
 
         try {
-          if (meta.skillType === "skill") {
-            await this.syncSkillPackage(meta, sourceKey, result);
+          if (target.meta.skillType === "skill") {
+            await this.syncSkillPackage(target.meta, source, target.compositeKey, result);
           } else {
-            const content = await this.catalogService.getContent(sourceKey, meta.path);
-            await writeSkillFile(skillName, content.content);
-            sourceShaCache.set(skillName, content.shaOrVersion);
-            result.updated.push(skillName);
+            const content = await this.catalogService.getContent(source.sourceKey, target.meta.path);
+            await writeSkillFile(source.label, target.meta.name, content.content);
+            this.skillShaCache.set(target.compositeKey, content.shaOrVersion);
+            result.updated.push(target.compositeKey);
           }
         } catch (itemError) {
           const msg = itemError instanceof Error ? itemError.message : String(itemError);
-          result.errors.push(`Failed to sync ${skillName}: ${msg}`);
-          this.logger.error(`Failed to sync ${skillName}`, itemError);
+          result.errors.push(`Failed to sync ${target.compositeKey}: ${msg}`);
+          this.logger.error(`Failed to sync ${target.compositeKey}`, itemError);
         }
       }
 
-      // Clean up cursor-rules no longer opted-in.
-      // Both listExistingSkillFiles and listExistingSkillPackages return normalized names
-      // (already transformed by normalizeSkillName when written), so compare against a
-      // normalized version of the opted-in set to avoid accidental deletions when skill
-      // names from skill.json have spaces or mixed case.
-      const normalizedOptedInSet = new Set(
-        optedInSkills.flatMap((n) => {
-          try {
-            return [normalizeSkillName(n)];
-          } catch {
-            return [];
-          }
-        })
-      );
-
-      const existingFiles = await listExistingSkillFiles();
-      for (const fileSkillName of existingFiles) {
-        if (!normalizedOptedInSet.has(fileSkillName)) {
-          await deleteSkillFile(fileSkillName);
-          result.deleted.push(fileSkillName);
-          sourceShaCache.delete(fileSkillName);
+      // Compute the set of currently-wanted on-disk identities (label, normalized name)
+      // so we can prune anything that is no longer opted-in.
+      const wanted = new Set<string>();
+      for (const target of targets) {
+        if (!target.meta) {
+          continue;
+        }
+        try {
+          wanted.add(`${target.label}|${normalizeSkillName(target.meta.name)}`);
+        } catch {
+          // ignore invalid names
         }
       }
 
-      // Clean up skill packages no longer opted-in
-      const existingPackages = await listExistingSkillPackages();
-      for (const pkgName of existingPackages) {
-        if (!normalizedOptedInSet.has(pkgName)) {
-          await deleteSkillPackage(pkgName);
-          if (!result.deleted.includes(pkgName)) {
-            result.deleted.push(pkgName);
+      const existingFiles: ExistingSkillFile[] = await listExistingSkillFiles();
+      for (const entry of existingFiles) {
+        if (!entry.label) {
+          // Loose flat-layout file lingering from a failed migration; leave it alone.
+          continue;
+        }
+        const key = `${entry.label}|${entry.name}`;
+        if (!wanted.has(key)) {
+          await deleteSkillFile(entry.label, entry.name);
+          const composite = compositeSkillKey(entry.label, entry.name);
+          result.deleted.push(composite);
+          this.skillShaCache.delete(composite);
+        }
+      }
+
+      const existingPackages: ExistingSkillPackage[] = await listExistingSkillPackages();
+      for (const entry of existingPackages) {
+        if (!entry.label) {
+          continue;
+        }
+        const key = `${entry.label}|${entry.name}`;
+        if (!wanted.has(key)) {
+          await deleteSkillPackage(entry.label, entry.name);
+          const composite = compositeSkillKey(entry.label, entry.name);
+          if (!result.deleted.includes(composite)) {
+            result.deleted.push(composite);
           }
-          sourceShaCache.delete(pkgName);
+          this.skillShaCache.delete(composite);
         }
       }
 
@@ -166,8 +202,15 @@ export class SyncEngine implements vscode.Disposable {
       result.timestamp = this.lastSyncTime.toISOString();
       if (result.errors.length > 0) {
         result.status = result.updated.length > 0 || result.deleted.length > 0 ? "partial" : "failed";
-        result.reason = "unknown";
-        result.message = "Sync completed with errors.";
+        if (firstAuthReason) {
+          // Surface auth as the headline reason so the UI can offer a Sign In
+          // button instead of a generic "View Logs" prompt.
+          result.reason = firstAuthReason;
+          result.message = firstAuthMessage ?? "GitHub authorization required.";
+        } else {
+          result.reason = "unknown";
+          result.message = "Sync completed with errors.";
+        }
       } else {
         result.status = "success";
         result.reason = "none";
@@ -195,50 +238,58 @@ export class SyncEngine implements vscode.Disposable {
     }
 
     if (
-      catalogSnapshotForManifest &&
-      catalogSnapshotForManifest.length > 0 &&
-      (result.status === "success" || result.status === "partial")
+      mergedMetasForManifest &&
+      mergedMetasForManifest.length > 0 &&
+      (result.status === "success" || result.status === "partial") &&
+      firstSource
     ) {
-      void writeWorkspaceCatalogManifest(sourceKey, catalogSnapshotForManifest);
+      void writeWorkspaceCatalogManifest(sources, mergedMetasForManifest);
     }
 
     this.emitResult(result, isManual);
     return result;
   }
 
-  public async syncSingle(skillName: string, optIn: boolean): Promise<SyncResult> {
+  public async syncSingle(skillIdentifier: string, optIn: boolean): Promise<SyncResult> {
     if (!optIn) {
-      // Try removing as both types gracefully
-      await deleteSkillFile(skillName);
-      await deleteSkillPackage(skillName);
-      this.getSourceShaCache(currentSourceKey(this.configService)).delete(skillName);
-      const result = this.createResult("success", "none", `Disabled ${skillName}.`);
-      result.deleted.push(skillName);
+      const sources = this.configService.getResolvedSources();
+      const parsed = parseCompositeSkillKey(skillIdentifier);
+      const candidates: Array<{ label: string; name: string }> = parsed
+        ? [parsed]
+        : sources.map((s) => ({ label: s.label, name: skillIdentifier }));
+
+      for (const { label, name } of candidates) {
+        await deleteSkillFile(label, name);
+        await deleteSkillPackage(label, name);
+        this.skillShaCache.delete(compositeSkillKey(label, name));
+      }
+      const result = this.createResult("success", "none", `Disabled ${skillIdentifier}.`);
+      result.deleted.push(skillIdentifier);
       this.emitResult(result, true);
       return result;
     }
 
     const result = await this.sync(true);
     if (result.status !== "success" && result.status !== "partial") {
-      result.message = `Failed to enable ${skillName}. ${result.message}`;
+      result.message = `Failed to enable ${skillIdentifier}. ${result.message}`;
     }
     return result;
   }
 
   private async syncSkillPackage(
     meta: SkillMeta,
-    sourceKey: string,
+    source: ResolvedSource,
+    compositeKey: string,
     result: SyncResult
   ): Promise<void> {
     const files = meta.skillFiles ?? [];
     const skillName = meta.name;
 
     if (files.length === 0) {
-      this.logger.warn(`Skill package ${skillName} has no files listed; skipping.`);
+      this.logger.warn(`Skill package ${compositeKey} has no files listed; skipping.`);
       return;
     }
 
-    const sourceShaCache = this.getSourceShaCache(sourceKey);
     const packageDirPath = meta.path ?? "";
 
     for (const filePath of files) {
@@ -247,22 +298,13 @@ export class SyncEngine implements vscode.Disposable {
         ? filePath.slice(packageDirPath.length + 1)
         : filePath.split("/").pop() ?? filePath;
 
-      const content = await this.catalogService.getContent(sourceKey, filePath);
+      const content = await this.catalogService.getContent(source.sourceKey, filePath);
 
-      await writeSkillPackageFile(skillName, relPath, content.content);
+      await writeSkillPackageFile(source.label, skillName, relPath, content.content);
     }
 
-    sourceShaCache.set(skillName, meta.shaOrVersion);
-    result.updated.push(skillName);
-  }
-
-  private getSourceShaCache(sourceKey: string): Map<string, string> {
-    let sourceCache = this.skillShaCache.get(sourceKey);
-    if (!sourceCache) {
-      sourceCache = new Map<string, string>();
-      this.skillShaCache.set(sourceKey, sourceCache);
-    }
-    return sourceCache;
+    this.skillShaCache.set(compositeKey, meta.shaOrVersion);
+    result.updated.push(compositeKey);
   }
 
   public dispose(): void {
@@ -317,17 +359,93 @@ export class SyncEngine implements vscode.Disposable {
         return;
       }
       this.lastBackgroundFailureReason = result.reason;
-      void vscode.window.showWarningMessage(
-        `Skill sync needs attention: ${result.message}`,
-        "View Logs"
-      ).then((choice) => {
-        if (choice === "View Logs") {
-          this.logger.show();
-        }
-      });
+      // Auth-related failures get a Sign In button so the user can recover
+      // straight from the notification instead of digging through the logs.
+      const needsAuth = result.reason === "no_session" || result.reason === "auth_expired";
+      const actions = needsAuth ? ["Sign In", "View Logs"] : ["View Logs"];
+      void vscode.window
+        .showWarningMessage(`Skill sync needs attention: ${result.message}`, ...actions)
+        .then((choice) => {
+          if (choice === "Sign In") {
+            void vscode.commands.executeCommand("skillSync.signIn");
+          }
+          if (choice === "View Logs") {
+            this.logger.show();
+          }
+        });
       return;
     }
 
     this.lastBackgroundFailureReason = "none";
   }
+}
+
+interface OptedInTarget {
+  compositeKey: string;
+  label: string;
+  name: string;
+  meta?: SkillMeta;
+}
+
+/**
+ * Resolve persisted opted-in identifiers (composite keys after migration, or
+ * bare names from older configs) into composite-keyed targets. Bare names are
+ * matched against any source that exposes them; if multiple sources do, the
+ * first wins to keep behavior deterministic.
+ */
+function resolveOptedInTargets(
+  optedIn: string[],
+  byCompositeKey: Map<string, SkillMeta>,
+  sources: ResolvedSource[]
+): OptedInTarget[] {
+  const targets: OptedInTarget[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of optedIn) {
+    const parsed = parseCompositeSkillKey(entry);
+    if (parsed) {
+      const compositeKey = entry;
+      if (seen.has(compositeKey)) {
+        continue;
+      }
+      seen.add(compositeKey);
+      targets.push({
+        compositeKey,
+        label: parsed.label,
+        name: parsed.name,
+        meta: byCompositeKey.get(compositeKey)
+      });
+      continue;
+    }
+
+    let matched = false;
+    for (const source of sources) {
+      const compositeKey = compositeSkillKey(source.label, entry);
+      const meta = byCompositeKey.get(compositeKey);
+      if (meta) {
+        if (seen.has(compositeKey)) {
+          continue;
+        }
+        seen.add(compositeKey);
+        targets.push({
+          compositeKey,
+          label: source.label,
+          name: entry,
+          meta
+        });
+        matched = true;
+        break;
+      }
+    }
+    if (!matched && sources.length > 0) {
+      const fallbackLabel = sources[0].label;
+      const compositeKey = compositeSkillKey(fallbackLabel, entry);
+      if (!seen.has(compositeKey)) {
+        seen.add(compositeKey);
+        targets.push({ compositeKey, label: fallbackLabel, name: entry });
+      }
+    }
+  }
+
+  return targets;
 }
