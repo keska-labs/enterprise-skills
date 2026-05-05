@@ -175,6 +175,7 @@ export function App(): React.JSX.Element {
 
   const sourceHint =
     state?.isConnected && state.lastError && state.connectionHealth !== "ok" ? state.lastError : null;
+  const selectedSkills = useMemo(() => new Set(state?.optedInSkills ?? []), [state?.optedInSkills]);
 
   const postConnectRepo = () => {
     vscode.postMessage({ type: "connectRepo" });
@@ -413,7 +414,10 @@ export function App(): React.JSX.Element {
                         browseChildren={browseChildren}
                         collapsedPaths={collapsedBrowsePaths}
                         expandingPath={expandingPath}
+                        skillsRootPath={skillsRoot}
+                        selectedSkills={selectedSkills}
                         onExpandDir={onExpandDir}
+                        onToggleSkill={onToggle}
                       />
                     )}
                   </div>
