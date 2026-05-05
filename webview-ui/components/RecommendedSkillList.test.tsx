@@ -9,6 +9,7 @@ describe("RecommendedSkillList", () => {
         recommendations={[
           {
             skill: {
+              compositeKey: "test/my-skill",
               name: "my-skill",
               description: "Does things",
               version: "1.0.0",
@@ -34,13 +35,13 @@ describe("RecommendedSkillList", () => {
       <RecommendedSkillList
         recommendations={[
           {
-            skill: { name: "w", description: "", version: "1", category: "", skillType: "cursor-rule" },
+            skill: { compositeKey: "test/w", name: "w", description: "", version: "1", category: "", skillType: "cursor-rule" },
             score: 30,
             reasons: ["Weak signal"],
             matchKind: "weak"
           },
           {
-            skill: { name: "g", description: "", version: "1", category: "", skillType: "cursor-rule" },
+            skill: { compositeKey: "test/g", name: "g", description: "", version: "1", category: "", skillType: "cursor-rule" },
             score: 15,
             reasons: ["General-purpose recommendation"],
             matchKind: "general"

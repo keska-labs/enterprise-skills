@@ -1,33 +1,38 @@
 import React from "react";
+import { SkillSourceState } from "../types/messages";
 import { IconPencil, IconSearch, IconSync } from "./icons";
 
 interface HeaderProps {
   searchQuery: string;
   onSearchChange: (value: string) => void;
   showSearch?: boolean;
-  sourceMode: "github-repo" | "custom-registry";
-  sourceRepository: string;
+  sources: SkillSourceState[];
   lastSynced: string | null;
   isSyncing: boolean;
   optedInCount: number;
   totalCount: number;
   sourceHint?: string | null;
-  onChangeRepo: () => void;
+  onAddSource: () => void;
+  onRemoveSource: (sourceKey: string) => void;
   onSyncNow: () => void;
+}
+
+function sourceTypeLabel(type: SkillSourceState["type"]): string {
+  return type === "github-repo" ? "GitHub" : "registry";
 }
 
 export function Header({
   searchQuery,
   onSearchChange,
   showSearch = true,
-  sourceMode,
-  sourceRepository,
+  sources,
   lastSynced,
   isSyncing,
   optedInCount,
   totalCount,
   sourceHint,
-  onChangeRepo,
+  onAddSource,
+  onRemoveSource,
   onSyncNow
 }: HeaderProps): React.JSX.Element {
   const syncText = isSyncing ? "Syncing…" : lastSynced ? formatLastSynced(lastSynced) : "Not synced yet";
@@ -35,24 +40,44 @@ export function Header({
   return (
     <header className="header">
       <div className="header-row">
-        <div className="source-block">
-          <span className="source-name" title={sourceRepository}>
-            {sourceRepository.trim() ? sourceRepository : "—"}
-          </span>
-          {sourceMode === "github-repo" ? (
-            <button
-              type="button"
-              className="source-edit-btn"
-              onClick={onChangeRepo}
-              disabled={isSyncing}
-              aria-label="Change repository"
-              title="Change repository"
-            >
-              <IconPencil />
-            </button>
+        <div className="source-list-block">
+          {sources.length === 0 ? (
+            <span className="source-name source-name--empty" title="No sources configured">—</span>
           ) : (
-            <span className="source-kind">registry</span>
+            <ul className="source-list" aria-label="Configured skill sources">
+              {sources.map((source) => (
+                <li key={source.sourceKey} className="source-chip">
+                  <span className="source-chip-name" title={`${source.label} • ${source.value}`}>
+                    {source.label}
+                  </span>
+                  <span className="source-chip-kind" aria-label={`${sourceTypeLabel(source.type)} source`}>
+                    {sourceTypeLabel(source.type)}
+                  </span>
+                  <button
+                    type="button"
+                    className="source-chip-remove"
+                    onClick={() => onRemoveSource(source.sourceKey)}
+                    disabled={isSyncing}
+                    aria-label={`Remove source ${source.label}`}
+                    title={`Remove source ${source.label}`}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
+          <button
+            type="button"
+            className="source-add-btn"
+            onClick={onAddSource}
+            disabled={isSyncing}
+            aria-label="Add skill source"
+            title="Add skill source"
+          >
+            <IconPencil />
+            <span className="source-add-label">Add source</span>
+          </button>
         </div>
         <button
           type="button"
@@ -75,14 +100,6 @@ export function Header({
         )}
         {totalCount > 0 && (
           <span>{optedInCount}/{totalCount} enabled</span>
-        )}
-        {sourceMode !== "github-repo" && (
-          <>
-            <span className="meta-sep" aria-hidden>·</span>
-            <button type="button" className="meta-link" onClick={onChangeRepo} disabled={isSyncing}>
-              Change registry
-            </button>
-          </>
         )}
       </div>
       {showSearch ? (

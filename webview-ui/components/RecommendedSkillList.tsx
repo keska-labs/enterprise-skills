@@ -5,7 +5,7 @@ import { SkillRow } from "./SkillRow";
 interface RecommendedSkillListProps {
   recommendations: Recommendation[];
   optedInSkills: string[];
-  onToggle: (skillName: string, optIn: boolean) => void;
+  onToggle: (compositeKey: string, optIn: boolean) => void;
 }
 
 export function RecommendedSkillList({
@@ -17,6 +17,33 @@ export function RecommendedSkillList({
   const weak = recommendations.filter((r) => r.matchKind === "weak");
   const general = recommendations.filter((r) => r.matchKind === "general");
 
+  const renderReasons = (rec: Recommendation): React.JSX.Element | null => {
+    // AI reasons are full sentences, often a couple of lines. Pill chips
+    // squeeze them into hard-to-read shapes — render as a quoted prose block
+    // with an explicit "AI" label so the source is obvious. Heuristic reasons
+    // are short labels and stay as chips.
+    if (rec.aiReason) {
+      return (
+        <figure className="reason-prose" aria-label="Why recommended">
+          <span className="reason-prose-label">AI</span>
+          <blockquote className="reason-prose-text">{rec.aiReason}</blockquote>
+        </figure>
+      );
+    }
+    if (rec.reasons.length === 0) {
+      return null;
+    }
+    return (
+      <ul className="reason-chips" aria-label="Why recommended">
+        {rec.reasons.map((reason, i) => (
+          <li key={`${rec.skill.compositeKey}-r-${i}`} className="reason-chip">
+            {reason}
+          </li>
+        ))}
+      </ul>
+    );
+  };
+
   const renderGroup = (title: string, slug: string, items: Recommendation[]): React.JSX.Element | null => {
     if (items.length === 0) {
       return null;
@@ -27,17 +54,11 @@ export function RecommendedSkillList({
           {title}
         </h2>
         {items.map((rec) => (
-          <div key={rec.skill.name} className="recommended-card">
-            <ul className="reason-chips" aria-label="Why recommended">
-              {(rec.aiReason ? [rec.aiReason] : rec.reasons).map((reason, i) => (
-                <li key={`${rec.skill.name}-r-${i}`} className="reason-chip">
-                  {reason}
-                </li>
-              ))}
-            </ul>
+          <div key={rec.skill.compositeKey} className="recommended-card">
+            {renderReasons(rec)}
             <SkillRow
               skill={rec.skill}
-              isOptedIn={optedInSkills.includes(rec.skill.name)}
+              isOptedIn={optedInSkills.includes(rec.skill.compositeKey)}
               onToggle={onToggle}
             />
           </div>

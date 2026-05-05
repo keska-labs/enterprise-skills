@@ -5,7 +5,7 @@ import { SkillRow } from "./SkillRow";
 interface CategoryGroupProps {
   category: CategoryData;
   optedInSkills: string[];
-  onToggle: (skillName: string, optIn: boolean) => void;
+  onToggle: (compositeKey: string, optIn: boolean) => void;
   variant?: "default" | "results";
 }
 
@@ -20,9 +20,9 @@ export function CategoryGroup({ category, optedInSkills, onToggle, variant = "de
       </summary>
       {category.skills.map((skill) => (
         <SkillRow
-          key={skill.name}
+          key={skill.compositeKey}
           skill={skill}
-          isOptedIn={optedInSkills.includes(skill.name)}
+          isOptedIn={optedInSkills.includes(skill.compositeKey)}
           onToggle={onToggle}
         />
       ))}
