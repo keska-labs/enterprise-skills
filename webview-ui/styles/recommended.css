@@ -1,3 +1,59 @@
+.recommended-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.65rem;
+  padding: 0 0 0.75rem;
+  margin-bottom: 0.25rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.2));
+}
+
+.rec-source-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.35));
+}
+
+.rec-source-badge--ai {
+  color: var(--chip-fg, #bae6fd);
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.35);
+}
+
+.rec-source-badge--muted {
+  color: var(--muted-foreground, #94a3b8);
+  background: var(--surface-elevated, rgba(15, 23, 42, 0.35));
+}
+
+.rec-provider-hint {
+  font-size: 0.68rem;
+  color: var(--muted-foreground, #94a3b8);
+  flex: 1 1 auto;
+  min-width: 4rem;
+}
+
+.rec-toolbar-button {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.45));
+  background: var(--surface-elevated, rgba(15, 23, 42, 0.45));
+  color: inherit;
+  cursor: pointer;
+}
+
+.rec-toolbar-button:hover {
+  border-color: rgba(56, 189, 248, 0.45);
+}
+
+.rec-toolbar-button--secondary {
+  opacity: 0.92;
+}
+
 .recommended-layout {
   display: flex;
   flex-direction: column;

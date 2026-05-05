@@ -29,7 +29,7 @@ export function RecommendedSkillList({
         {items.map((rec) => (
           <div key={rec.skill.name} className="recommended-card">
             <ul className="reason-chips" aria-label="Why recommended">
-              {rec.reasons.map((reason, i) => (
+              {(rec.aiReason ? [rec.aiReason] : rec.reasons).map((reason, i) => (
                 <li key={`${rec.skill.name}-r-${i}`} className="reason-chip">
                   {reason}
                 </li>

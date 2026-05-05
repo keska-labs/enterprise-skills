@@ -9,8 +9,10 @@ import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
-import { buildRecommendationsPayload } from "./skillManagerRecommendations";
+import { buildAskAgentPromptFromContext, buildRecommendationsPayload } from "./skillManagerRecommendations";
+import { LlmSkillRecommender } from "../services/LlmSkillRecommender";
 import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
+import { seedChatWithPrompt } from "../utils/chatPrompt";
 import {
   handleGithubExpandBrowsePath,
   handleGithubLoadBrowseRoot,
@@ -23,6 +25,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "skillSync.sidebarManager";
   private view?: vscode.WebviewView;
   private recommendedTabActive = false;
+  private recommendationsCts?: vscode.CancellationTokenSource;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -33,12 +36,13 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
     private readonly syncEngine: SyncEngine,
     private readonly logger: Logger,
     private readonly catalogStore: SkillCatalogStore,
-    private readonly workspaceAnalyzer: WorkspaceAnalyzer
+    private readonly workspaceAnalyzer: WorkspaceAnalyzer,
+    private readonly llmSkillRecommender: LlmSkillRecommender
   ) {
     this.syncEngine.onSyncComplete(() => {
       void this.postState();
       if (this.recommendedTabActive) {
-        void this.sendRecommendations();
+        void this.sendRecommendations(false);
       }
     });
   }
@@ -68,6 +72,12 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       if (webviewView.visible) {
         void this.postState();
       }
+    });
+
+    webviewView.onDidDispose(() => {
+      this.recommendationsCts?.cancel();
+      this.recommendationsCts?.dispose();
+      this.recommendationsCts = undefined;
     });
   }
 
@@ -141,22 +151,52 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         break;
       }
       case "requestRecommendations": {
-        await this.sendRecommendations();
+        await this.sendRecommendations(false);
+        break;
+      }
+      case "refreshRecommendations": {
+        await this.sendRecommendations(true);
+        break;
+      }
+      case "askAgentToRecommend": {
+        const prompt = await buildAskAgentPromptFromContext(
+          this.workspaceAnalyzer,
+          this.configService,
+          this.catalogStore
+        );
+        const result = await seedChatWithPrompt(prompt);
+        const message = result.viaDeeplink
+          ? "Cursor chat opened with the recommendation prompt pre-filled — press enter to send or tweak it first."
+          : result.opened
+            ? "Opened chat — paste from clipboard (⌘V) if the prompt wasn't pre-filled."
+            : "Prompt copied to clipboard — paste it into chat (⌘V) and press enter.";
+        await vscode.window.showInformationMessage(message);
         break;
       }
     }
   }
 
-  private async sendRecommendations(): Promise<void> {
+  private async sendRecommendations(forceRefresh: boolean): Promise<void> {
+    this.recommendationsCts?.cancel();
+    this.recommendationsCts?.dispose();
+    this.recommendationsCts = new vscode.CancellationTokenSource();
+
     try {
-      const payload = await buildRecommendationsPayload(this.workspaceAnalyzer, this.configService, this.catalogStore);
+      const payload = await buildRecommendationsPayload(
+        this.workspaceAnalyzer,
+        this.configService,
+        this.catalogStore,
+        this.llmSkillRecommender,
+        { forceRefresh, token: this.recommendationsCts.token }
+      );
       this.view?.webview.postMessage({ type: "recommendationsResult", ...payload });
     } catch (error: unknown) {
       this.logger.error("Recommendations failed", error);
       this.view?.webview.postMessage({
         type: "recommendationsResult",
         recommendations: [],
-        catalogReady: false
+        catalogReady: false,
+        source: "heuristic"
       });
     }
   }

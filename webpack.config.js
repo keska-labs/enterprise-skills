@@ -13,7 +13,8 @@ module.exports = [
       libraryTarget: "commonjs2"
     },
     externals: {
-      vscode: "commonjs vscode"
+      vscode: "commonjs vscode",
+      "@cursor/sdk": "commonjs @cursor/sdk"
     },
     resolve: {
       extensions: [".ts", ".js"]

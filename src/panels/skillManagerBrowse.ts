@@ -4,6 +4,7 @@ import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore
 import { BrowseEntry, ExtensionMessage, SkillInfo } from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
 import { parseGithubRepoRef } from "./skillManagerState";
+import { persistCatalogManifestFromStore } from "../utils/catalogManifest";
 
 const SKILL_FILE = /\.(md|mdc|yaml|yml)$/i;
 
@@ -91,6 +92,7 @@ export async function handleGithubLoadBrowseRoot(
     skillsRootPath: skillsRoot
   });
   catalogStore.merge(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
 }
 
 export async function handleGithubExpandBrowsePath(
@@ -116,6 +118,7 @@ export async function handleGithubExpandBrowsePath(
   const skillsRoot =
     catalogStore.load(g.sourceKey)?.skillsRoot || (await repoService.resolveSkillsRootPath(g.owner, g.repo));
   catalogStore.merge(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
 }
 
 export async function handleGithubSearchCatalog(
@@ -140,6 +143,7 @@ export async function handleGithubSearchCatalog(
   const all = await repoService.listSkillsInRepo(g.owner, g.repo);
   const root = await repoService.resolveSkillsRootPath(g.owner, g.repo);
   catalogStore.save(g.sourceKey, root, all);
+  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
   const q = qTrim.toLowerCase();
   const skills: SkillInfo[] = all
     .filter(

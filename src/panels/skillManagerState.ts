@@ -8,6 +8,7 @@ import { ServiceError } from "../services/ServiceError";
 import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
 import { CategoryData, SkillInfo, SkillManagerState } from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
+import { persistCatalogManifestFromStore } from "../utils/catalogManifest";
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
@@ -62,6 +63,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
       connectionHealth = "ok";
       const registryKey = buildSourceKey("custom-registry", "", registryUrl);
       catalogStore.save(registryKey, "", skills);
+      persistCatalogManifestFromStore(catalogStore, registryKey);
       catalogSize = skills.length;
     } catch (error) {
       logger.error("Failed to build skill manager state (registry)", error);

@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -77,6 +77,22 @@
       {
         "command": "skillSync.focusSidebar",
         "title": "Skill Sync: Focus Sidebar"
+      },
+      {
+        "command": "skillSync.setOpenAiRecommendationKey",
+        "title": "Skill Sync: Set OpenAI API Key (Recommendations)"
+      },
+      {
+        "command": "skillSync.setAnthropicRecommendationKey",
+        "title": "Skill Sync: Set Anthropic API Key (Recommendations)"
+      },
+      {
+        "command": "skillSync.setCursorSdkRecommendationKey",
+        "title": "Skill Sync: Set Cursor API Key (Recommendations)"
+      },
+      {
+        "command": "skillSync.clearRecommendationKeys",
+        "title": "Skill Sync: Clear Recommendation API Keys"
       }
     ],
     "keybindings": [
@@ -117,6 +133,37 @@
         "skillSync.optedInSkills": {
           "type": "array",
           "default": []
+        },
+        "skillSync.recommendations.useLanguageModel": {
+          "type": "boolean",
+          "default": true,
+          "description": "Try LLM providers for the Recommended tab before falling back to keyword heuristics."
+        },
+        "skillSync.recommendations.modelFamily": {
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "vscode.lm chat model family filter (VS Code + Copilot)."
+        },
+        "skillSync.recommendations.cacheTtlMinutes": {
+          "type": "number",
+          "default": 1440,
+          "minimum": 1,
+          "description": "How long to cache AI/heuristic recommendation results per workspace."
+        },
+        "skillSync.recommendations.cursorSdkModel": {
+          "type": "string",
+          "default": "composer-2",
+          "description": "Model id when using @cursor/sdk with a Cursor API key."
+        },
+        "skillSync.recommendations.openAiModel": {
+          "type": "string",
+          "default": "gpt-4o-mini",
+          "description": "OpenAI model id for BYOK recommendations."
+        },
+        "skillSync.recommendations.anthropicModel": {
+          "type": "string",
+          "default": "claude-3-5-haiku-20241022",
+          "description": "Anthropic model id for BYOK recommendations."
         }
       }
     }
@@ -139,6 +186,7 @@
   },
   "type": "commonjs",
   "dependencies": {
+    "@cursor/sdk": "^1.0.12",
     "axios": "^1.15.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5"
@@ -156,6 +204,7 @@
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.6.0",
     "ajv": "^8.20.0",
     "css-loader": "^7.1.4",
     "eslint": "^8.57.0",
@@ -168,7 +217,6 @@
     "ts-loader": "^9.5.7",
     "typescript": "^6.0.3",
     "webpack": "^5.106.2",
-    "webpack-cli": "^7.0.2",
-    "@vscode/vsce": "^3.6.0"
+    "webpack-cli": "^7.0.2"
   }
 }
