@@ -10,5 +10,5 @@
     "cursor",
     "agents"
   ],
-  "agents": "cursor-plugin/agents"
+  "agents": "agents"
 }

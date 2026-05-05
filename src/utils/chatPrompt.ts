@@ -114,7 +114,7 @@ export function buildAskAgentPrompt(
 ${candidateLines.join("\n")}${candidateOverflow}`
     : "Catalog candidates: (none — try syncing first via `Skill Sync: Manage AI Skills`).";
 
-  return `Use the Agent Skill Sync **skill-recommender** subagent (\`cursor-plugin/agents/skill-recommender.md\`) to pick the best Cursor agent skills for this workspace. Recommend only — do not edit files.
+  return `Use the Agent Skill Sync **skill-recommender** subagent (\`agents/skill-recommender.md\`) to pick the best Cursor agent skills for this workspace. Recommend only — do not edit files.
 
 Workspace fingerprint
 - Languages: ${languagesLine}
