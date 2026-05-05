@@ -38,6 +38,12 @@ Search by skill name, description, or category.
 
 Filter enabled items and toggle skills on or off with one click.
 
+### Recommended tab and Ask the Agent
+
+![Recommended tab with Ask the Agent](media/preview-recommended-ask-agent.png)
+
+The **Recommended** tab scores catalog skills against your workspace (LLM ranking when available, otherwise **HEURISTIC**). **Ask the Agent** prepares a detailed prompt—workspace fingerprint, catalog candidates, and skills you already enabled—and opens Cursor’s **Create chat with prompt** sheet so you can review it, then **Create Chat** to drop it into the agent composer (you can edit before sending). The same text is copied to the clipboard as a fallback. Works best with the bundled **skill-recommender** Cursor plugin in this repo (`cursor-plugin/`).
+
 ---
 
 ## What you can do
@@ -57,7 +63,7 @@ Filter enabled items and toggle skills on or off with one click.
 - The **Recommended** tab ranks catalog skills against your workspace using trigger metadata and lightweight repo signals.
 - With **`skillSync.recommendations.useLanguageModel`** enabled (default), it tries **VS Code’s Language Model API** (`vscode.lm`, e.g. Copilot), then optional keys for **Cursor SDK**, **OpenAI**, and **Anthropic** — configure keys via the Command Palette (`Skill Sync: Set … Recommendation Key`). Keys are stored in **Secret Storage**, not `settings.json`.
 - If no provider is available, results fall back to **heuristic** ranking (badge in the UI). Use **Refresh** to bypass the TTL cache.
-- **Ask the Agent** opens chat with a seeded prompt so the **Cursor plugin** subagent in this repo (`cursor-plugin/agents/skill-recommender.md`) can rank skills using your Cursor subscription — no API key. Install the plugin from this repository per [Cursor Plugins](https://cursor.com/docs/reference/plugins).
+- **Ask the Agent** seeds Cursor chat via a [prompt deeplink](https://cursor.com/docs/reference/deeplinks): you confirm in **Create chat with prompt**, then the composer opens with context already filled (workspace languages/deps/paths, catalog list, opted-in skills). That keeps ranking inside Cursor without an API key when you use the **skill-recommender** subagent from this repo’s plugin (`cursor-plugin/agents/skill-recommender.md`). Install the plugin per [Cursor Plugins](https://cursor.com/docs/reference/plugins).
 - After sync or browse, the extension writes **`.cursor/skill-sync/catalog.json`** (skill metadata only) so the subagent can read the live catalog.
 
 ---
