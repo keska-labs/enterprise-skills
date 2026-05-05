@@ -50,4 +50,28 @@ export class ConfigService {
     }
     return this.getRegistryUrl().trim().length > 0;
   }
+
+  public getRecommendationsUseLlm(): boolean {
+    return this.config.get<boolean>("recommendations.useLanguageModel", true);
+  }
+
+  public getRecommendationsModelFamily(): string {
+    return this.config.get<string>("recommendations.modelFamily", "gpt-4o");
+  }
+
+  public getRecommendationsCacheTtlMinutes(): number {
+    return this.config.get<number>("recommendations.cacheTtlMinutes", 1440);
+  }
+
+  public getRecommendationsCursorSdkModel(): string {
+    return this.config.get<string>("recommendations.cursorSdkModel", "composer-2");
+  }
+
+  public getRecommendationsOpenAiModel(): string {
+    return this.config.get<string>("recommendations.openAiModel", "gpt-4o-mini");
+  }
+
+  public getRecommendationsAnthropicModel(): string {
+    return this.config.get<string>("recommendations.anthropicModel", "claude-3-5-haiku-20241022");
+  }
 }

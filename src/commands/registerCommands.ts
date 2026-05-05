@@ -5,6 +5,7 @@ import { RepoService } from "../services/RepoService";
 import { SyncEngine } from "../services/SyncEngine";
 import { Logger } from "../utils/logger";
 import { RepoInfo, SyncResult } from "../types";
+import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
 
 export async function configureSource(
   authService: AuthService,
@@ -97,6 +98,54 @@ export function registerCommands(
   safeRegisterCommand(context, "skillSync.syncNow", async () => {
     const syncResult = await syncEngine.sync(true);
     showSyncOutcome(syncResult, logger, "Sync");
+  });
+
+  safeRegisterCommand(context, "skillSync.setOpenAiRecommendationKey", async () => {
+    const v = await vscode.window.showInputBox({
+      title: "OpenAI API key (recommendations)",
+      prompt: "Stored securely in Secret Storage — never written to settings.json.",
+      password: true,
+      ignoreFocusOut: true
+    });
+    if (v !== undefined && v.trim().length > 0) {
+      await context.secrets.store(RECOMMENDATION_SECRET_KEYS.openai, v.trim());
+      vscode.window.showInformationMessage("OpenAI key saved for Skill Sync recommendations.");
+    }
+  });
+
+  safeRegisterCommand(context, "skillSync.setAnthropicRecommendationKey", async () => {
+    const v = await vscode.window.showInputBox({
+      title: "Anthropic API key (recommendations)",
+      prompt: "Stored securely in Secret Storage.",
+      password: true,
+      ignoreFocusOut: true
+    });
+    if (v !== undefined && v.trim().length > 0) {
+      await context.secrets.store(RECOMMENDATION_SECRET_KEYS.anthropic, v.trim());
+      vscode.window.showInformationMessage("Anthropic key saved for Skill Sync recommendations.");
+    }
+  });
+
+  safeRegisterCommand(context, "skillSync.setCursorSdkRecommendationKey", async () => {
+    const v = await vscode.window.showInputBox({
+      title: "Cursor API key (recommendations)",
+      prompt: "From your Cursor dashboard — used only for ranking in the Recommended tab.",
+      password: true,
+      ignoreFocusOut: true
+    });
+    if (v !== undefined && v.trim().length > 0) {
+      await context.secrets.store(RECOMMENDATION_SECRET_KEYS.cursorSdk, v.trim());
+      vscode.window.showInformationMessage("Cursor API key saved for Skill Sync recommendations.");
+    }
+  });
+
+  safeRegisterCommand(context, "skillSync.clearRecommendationKeys", async () => {
+    await Promise.all([
+      context.secrets.delete(RECOMMENDATION_SECRET_KEYS.openai),
+      context.secrets.delete(RECOMMENDATION_SECRET_KEYS.anthropic),
+      context.secrets.delete(RECOMMENDATION_SECRET_KEYS.cursorSdk)
+    ]);
+    vscode.window.showInformationMessage("Cleared recommendation API keys.");
   });
 }
 

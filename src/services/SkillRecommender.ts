@@ -34,7 +34,7 @@ export function globMatchesPattern(pattern: string, relativePathLower: string, b
   return regex.test(basenameLower) || regex.test(relativePathLower);
 }
 
-function metaToSkillInfo(meta: SkillMeta): SkillInfo {
+export function skillMetaToSkillInfo(meta: SkillMeta): SkillInfo {
   return {
     name: meta.name,
     description: meta.description ?? "",
@@ -215,7 +215,7 @@ export function recommend(profile: WorkspaceProfile, metas: SkillMeta[], optedIn
     }
 
     results.push({
-      skill: metaToSkillInfo(meta),
+      skill: skillMetaToSkillInfo(meta),
       score,
       reasons: reasons.length > 0 ? reasons : ["Suggested for this workspace"],
       matchKind

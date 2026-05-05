@@ -10,6 +10,8 @@ import { SkillManagerPanel } from "./panels/SkillManagerPanel";
 import { SkillManagerSidebarProvider } from "./panels/SkillManagerSidebarProvider";
 import { SkillCatalogStore } from "./services/SkillCatalogStore";
 import { WorkspaceAnalyzer } from "./services/WorkspaceAnalyzer";
+import { LlmRecommendationCache } from "./services/LlmRecommendationCache";
+import { LlmSkillRecommender } from "./services/LlmSkillRecommender";
 import { maybeShowConfigurePrompt } from "./utils/welcomePrompt";
 
 let syncEngineRef: SyncEngine | undefined;
@@ -29,6 +31,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const registryService = new RegistryService(authService, configService);
   const catalogStore = new SkillCatalogStore(context.globalState);
   const workspaceAnalyzer = new WorkspaceAnalyzer();
+  const llmRecommendationCache = new LlmRecommendationCache(context.globalState);
+  const llmSkillRecommender = new LlmSkillRecommender(context.secrets, configService, llmRecommendationCache, logger);
   const syncEngine = new SyncEngine(
     authService,
     configService,
@@ -46,7 +50,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     syncEngine,
     logger,
     catalogStore,
-    workspaceAnalyzer
+    workspaceAnalyzer,
+    llmSkillRecommender
   );
 
   syncEngineRef = syncEngine;
@@ -71,6 +76,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           logger,
           catalogStore,
           workspaceAnalyzer,
+          llmSkillRecommender,
           configureSource
         );
       });
