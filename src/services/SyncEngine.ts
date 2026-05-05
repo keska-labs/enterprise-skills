@@ -262,13 +262,17 @@ export class SyncEngine implements vscode.Disposable {
     }
     const sourceKey = buildSourceKey("github-repo", repoRef, "");
     const cached = this.catalogStore.load(sourceKey);
-    if (cached && cached.metas.length > 0) {
+    if (cached && cached.metas.length > 0 && !this.hasIncompleteSkillPackages(cached.metas)) {
       return cached.metas;
     }
     const metas = await this.repoService.listSkillsInRepo(owner, repo);
     const root = await this.repoService.resolveSkillsRootPath(owner, repo);
     this.catalogStore.save(sourceKey, root, metas);
     return metas;
+  }
+
+  private hasIncompleteSkillPackages(metas: SkillMeta[]): boolean {
+    return metas.some((meta) => meta.skillType === "skill" && (meta.skillFiles?.length ?? 0) === 0);
   }
 
   private async getGithubSkillContent(path: string) {

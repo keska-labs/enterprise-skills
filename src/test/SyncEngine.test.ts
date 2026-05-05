@@ -101,4 +101,58 @@ describe("SyncEngine", () => {
     expect(showWarning).not.toHaveBeenCalled();
     showWarning.mockRestore();
   });
+
+  it("refreshes incomplete cached skill-package metadata before syncing", async () => {
+    jest.spyOn(fileUtils, "writeSkillPackageFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
+    jest.spyOn(fileUtils, "listExistingSkillPackages").mockResolvedValue([]);
+    jest.spyOn(fileUtils, "deleteSkillFile").mockResolvedValue(undefined);
+    jest.spyOn(fileUtils, "deleteSkillPackage").mockResolvedValue(undefined);
+
+    const auth = { getToken: jest.fn().mockResolvedValue("token") } as unknown as AuthService;
+    const config = {
+      getOptedInSkills: jest.fn().mockReturnValue(["api-documentation"]),
+      getSourceMode: jest.fn().mockReturnValue("github-repo"),
+      getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      isSourceConfigured: jest.fn().mockReturnValue(true)
+    } as unknown as ConfigService;
+    const repo = {
+      listSkillsInRepo: jest.fn().mockResolvedValue([
+        {
+          name: "api-documentation",
+          path: "skills/api-documentation",
+          shaOrVersion: "abc1234",
+          skillType: "skill",
+          skillFiles: ["skills/api-documentation/SKILL.md"]
+        }
+      ]),
+      getSkillContent: jest.fn().mockResolvedValue({ content: "manifest", shaOrVersion: "abc1234" }),
+      resolveSkillsRootPath: jest.fn().mockResolvedValue("skills")
+    } as unknown as RepoService;
+    const registry = {} as RegistryService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const catalogStore = {
+      load: jest.fn().mockReturnValue({
+        skillsRoot: "skills",
+        metas: [
+          {
+            name: "api-documentation",
+            path: "skills/api-documentation",
+            shaOrVersion: "stale000",
+            skillType: "skill"
+          }
+        ]
+      }),
+      save: jest.fn(),
+      merge: jest.fn(),
+      clear: jest.fn()
+    } as unknown as SkillCatalogStore;
+
+    const engine = new SyncEngine(auth, config, repo, registry, logger, catalogStore);
+    const result = await engine.sync(true);
+
+    expect(repo.listSkillsInRepo).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("success");
+    expect(result.updated).toContain("api-documentation");
+  });
 });
