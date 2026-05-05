@@ -11,8 +11,10 @@ export class Logger {
     this.channel.appendLine(`[INFO] ${message}`);
   }
 
-  public warn(message: string): void {
-    this.channel.appendLine(`[WARN] ${message}`);
+  public warn(message: string, detail?: unknown): void {
+    const extra =
+      detail instanceof Error ? detail.message : detail !== undefined ? String(detail) : "";
+    this.channel.appendLine(`[WARN] ${message}${extra ? ` | ${extra}` : ""}`);
   }
 
   public error(message: string, error?: unknown): void {
