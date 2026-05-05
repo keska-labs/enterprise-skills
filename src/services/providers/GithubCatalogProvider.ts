@@ -11,7 +11,7 @@ export class GithubCatalogProvider implements SourceCatalogProvider {
   public async fetchCatalog(): Promise<CatalogSnapshot> {
     const [metas, skillsRoot] = await Promise.all([
       this.repoService.listSkillsInRepo(this.owner, this.repo),
-      this.repoService.resolveSkillsRootPath(this.owner, this.repo)
+      this.repoService.resolveSkillsRootPath()
     ]);
     return { skillsRoot, metas };
   }

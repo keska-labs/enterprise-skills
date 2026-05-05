@@ -1,27 +1,17 @@
 import { ConfigService } from "../services/ConfigService";
 import { CatalogService } from "../services/CatalogService";
 import { RepoService } from "../services/RepoService";
-import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
+import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { BrowseEntry, ExtensionMessage } from "../../webview-ui/types/messages";
-import { SkillMeta } from "../types";
+import { ResolvedSource, SkillMeta } from "../types";
 import { parseGithubRepoRef } from "./skillManagerState";
 import { persistCatalogManifestFromStore } from "../utils/catalogManifest";
 
 const SKILL_FILE = /\.(md|mdc|yaml|yml)$/i;
 
-type GithubSource = { owner: string; repo: string; sourceKey: string };
-
-function githubRepoRef(configService: ConfigService): GithubSource | null {
-  const repoRef = configService.getSourceRepository();
-  const parsed = parseGithubRepoRef(repoRef);
-  if (!parsed) {
-    return null;
-  }
-  return {
-    owner: parsed.owner,
-    repo: parsed.repo,
-    sourceKey: buildSourceKey("github-repo", repoRef, "")
-  };
+function findGithubSource(configService: ConfigService, sourceKey: string): ResolvedSource | null {
+  const sources = configService.getResolvedSources();
+  return sources.find((s) => s.sourceKey === sourceKey && s.type === "github-repo") ?? null;
 }
 
 function toBrowseEntries(
@@ -64,27 +54,31 @@ export async function handleGithubLoadBrowseRoot(
   catalogService: CatalogService,
   repoService: RepoService,
   catalogStore: SkillCatalogStore,
+  sourceKey: string,
   postMessage: (msg: ExtensionMessage) => void
 ): Promise<void> {
-  if (configService.getSourceMode() !== "github-repo") {
+  const source = findGithubSource(configService, sourceKey);
+  if (!source) {
+    postMessage({ type: "error", message: "Selected source is not a GitHub source." });
     return;
   }
-  const g = githubRepoRef(configService);
-  if (!g) {
-    postMessage({ type: "error", message: "Invalid repository format." });
+  const parsed = parseGithubRepoRef(source.value);
+  if (!parsed) {
+    postMessage({ type: "error", message: `Invalid repository format for source ${source.label}.` });
     return;
   }
-  const cachedRoot = catalogStore.load(g.sourceKey)?.skillsRoot;
-  const skillsRoot = cachedRoot || await repoService.resolveSkillsRootPath(g.owner, g.repo);
-  const entries = await catalogService.listChildren(g.sourceKey, skillsRoot);
+  const cachedRoot = catalogStore.load(source.sourceKey)?.skillsRoot;
+  const skillsRoot = cachedRoot ?? await repoService.resolveSkillsRootPath();
+  const entries = await catalogService.listChildren(source.sourceKey, skillsRoot);
   postMessage({
     type: "browseUpdate",
+    sourceKey: source.sourceKey,
     parentPath: skillsRoot,
     entries: toBrowseEntries(entries),
     skillsRootPath: skillsRoot
   });
-  catalogService.mergeBrowseListing(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
-  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
+  catalogService.mergeBrowseListing(source.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  persistCatalogManifestFromStore(catalogStore, source.sourceKey);
 }
 
 export async function handleGithubExpandBrowsePath(
@@ -92,24 +86,26 @@ export async function handleGithubExpandBrowsePath(
   catalogService: CatalogService,
   repoService: RepoService,
   catalogStore: SkillCatalogStore,
+  sourceKey: string,
   dirPath: string,
   postMessage: (msg: ExtensionMessage) => void
 ): Promise<void> {
-  if (configService.getSourceMode() !== "github-repo") {
+  const source = findGithubSource(configService, sourceKey);
+  if (!source) {
     return;
   }
-  const g = githubRepoRef(configService);
-  if (!g) {
+  if (!parseGithubRepoRef(source.value)) {
     return;
   }
-  const entries = await catalogService.listChildren(g.sourceKey, dirPath);
+  const entries = await catalogService.listChildren(source.sourceKey, dirPath);
   postMessage({
     type: "browseUpdate",
+    sourceKey: source.sourceKey,
     parentPath: dirPath,
     entries: toBrowseEntries(entries)
   });
-  const snapshot = await catalogService.getCatalog(g.sourceKey);
-  const skillsRoot = snapshot.skillsRoot || await repoService.resolveSkillsRootPath(g.owner, g.repo);
-  catalogService.mergeBrowseListing(g.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
-  persistCatalogManifestFromStore(catalogStore, g.sourceKey);
+  const snapshot = await catalogService.getCatalog(source);
+  const skillsRoot = snapshot.skillsRoot ?? await repoService.resolveSkillsRootPath();
+  catalogService.mergeBrowseListing(source.sourceKey, skillsRoot, skillFileMetas(repoService, skillsRoot, entries));
+  persistCatalogManifestFromStore(catalogStore, source.sourceKey);
 }
