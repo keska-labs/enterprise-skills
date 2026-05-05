@@ -2,13 +2,16 @@ import { ResolvedSource, SkillContent, SkillMeta, SkillMetaSource } from "../typ
 import { SkillCatalogStore } from "./SkillCatalogStore";
 import { CatalogSnapshot } from "./SourceCatalogProvider";
 import { SourceProviderRegistry } from "./SourceProviderRegistry";
+import { ServiceError } from "./ServiceError";
+import { Logger } from "../utils/logger";
 
 export class CatalogService {
   private readonly inFlight = new Map<string, Promise<CatalogSnapshot>>();
 
   public constructor(
     private readonly store: SkillCatalogStore,
-    private readonly providers: SourceProviderRegistry
+    private readonly providers: SourceProviderRegistry,
+    private readonly logger?: Logger
   ) {}
 
   /**
@@ -42,12 +45,53 @@ export class CatalogService {
         this.store.save(sourceKey, snapshot.skillsRoot, snapshot.metas);
         return stamp ? withSource(snapshot, stamp) : snapshot;
       })
+      .catch((error: unknown) => {
+        const stale = this.tryServeStale(sourceKey, error, stamp);
+        if (stale) {
+          return stale;
+        }
+        throw error;
+      })
       .finally(() => {
         this.inFlight.delete(sourceKey);
       });
 
     this.inFlight.set(sourceKey, pending);
     return pending;
+  }
+
+  /**
+   * When the upstream fetch fails with a transient reason (`rate_limited` or
+   * `network`) and we have a previously cached catalog, serve that cache so
+   * opted-in skills keep syncing. The store is not overwritten — the next
+   * successful fetch will replace it.
+   */
+  private tryServeStale(
+    sourceKey: string,
+    error: unknown,
+    stamp: SkillMetaSource | undefined
+  ): CatalogSnapshot | undefined {
+    if (!(error instanceof ServiceError)) {
+      return undefined;
+    }
+    if (error.reason !== "rate_limited" && error.reason !== "network") {
+      return undefined;
+    }
+    const cached = this.store.load(sourceKey);
+    if (!cached || cached.metas.length === 0) {
+      return undefined;
+    }
+    const snapshot: CatalogSnapshot = {
+      skillsRoot: cached.skillsRoot,
+      metas: cached.metas,
+      isStale: true,
+      staleReason: error.reason,
+      retryAt: error.retryAt?.toISOString()
+    };
+    this.logger?.warn(
+      `Serving stale catalog for ${sourceKey} (${error.reason}): ${error.message}`
+    );
+    return stamp ? withSource(snapshot, stamp) : snapshot;
   }
 
   public getContent(sourceKey: string, path: string): Promise<SkillContent> {
@@ -79,7 +123,10 @@ function toMetaSource(resolved: ResolvedSource): SkillMetaSource {
 function withSource(snapshot: CatalogSnapshot, source: SkillMetaSource): CatalogSnapshot {
   return {
     skillsRoot: snapshot.skillsRoot,
-    metas: snapshot.metas.map((meta) => ({ ...meta, source }))
+    metas: snapshot.metas.map((meta) => ({ ...meta, source })),
+    isStale: snapshot.isStale,
+    staleReason: snapshot.staleReason,
+    retryAt: snapshot.retryAt
   };
 }
 

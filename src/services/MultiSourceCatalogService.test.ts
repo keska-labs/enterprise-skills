@@ -45,6 +45,38 @@ describe("MultiSourceCatalogService", () => {
     expect(merged.byCompositeKey.get("b/shared")).toBeDefined();
   });
 
+  it("propagates stale snapshot flags onto perSource entries", async () => {
+    const a = source("a");
+    const b = source("b");
+    const retryAt = new Date("2030-01-01T00:00:00Z").toISOString();
+    const catalogService = {
+      getCatalog: jest.fn().mockImplementation(async (resolved: ResolvedSource) => {
+        if (resolved.label === "a") {
+          return {
+            skillsRoot: "skills",
+            metas: [meta("alpha", "1", "a")],
+            isStale: true,
+            staleReason: "rate_limited" as const,
+            retryAt
+          };
+        }
+        return { skillsRoot: "skills", metas: [meta("beta", "2", "b")] };
+      })
+    } as unknown as CatalogService;
+    const svc = new MultiSourceCatalogService(catalogService, makeLogger());
+
+    const merged = await svc.getMergedCatalog([a, b]);
+
+    const aResult = merged.perSource.find((p) => p.source.label === "a");
+    const bResult = merged.perSource.find((p) => p.source.label === "b");
+    expect(aResult?.stale).toBe(true);
+    expect(aResult?.staleReason).toBe("rate_limited");
+    expect(aResult?.retryAt).toBe(retryAt);
+    expect(aResult?.error).toBeUndefined();
+    expect(bResult?.stale).toBeUndefined();
+    expect(merged.metas).toHaveLength(2);
+  });
+
   it("records per-source errors without aborting other sources", async () => {
     const a = source("a");
     const b = source("b");

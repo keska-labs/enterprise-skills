@@ -1,4 +1,4 @@
-import { SkillContent, SkillMeta } from "../types";
+import { SkillContent, SkillMeta, SyncFailureReason } from "../types";
 
 export interface BrowseChildEntry {
   name: string;
@@ -10,6 +10,12 @@ export interface BrowseChildEntry {
 export interface CatalogSnapshot {
   skillsRoot: string;
   metas: SkillMeta[];
+  /** Set when this snapshot was served from cache because the upstream fetch failed (e.g. rate-limited). */
+  isStale?: boolean;
+  /** The reason the upstream fetch failed, only set when `isStale` is true. */
+  staleReason?: SyncFailureReason;
+  /** ISO timestamp of when the upstream is expected to be reachable again, only set when `isStale` is true. */
+  retryAt?: string;
 }
 
 export interface SourceCatalogProvider {

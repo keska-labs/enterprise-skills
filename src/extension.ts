@@ -36,7 +36,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const registryService = new RegistryService(authService, configService);
   const catalogStore = new SkillCatalogStore(context.globalState);
   const providerRegistry = new SourceProviderRegistry(repoService, registryService);
-  const catalogService = new CatalogService(catalogStore, providerRegistry);
+  const catalogService = new CatalogService(catalogStore, providerRegistry, logger);
   const multiSourceService = new MultiSourceCatalogService(catalogService, logger);
   const workspaceAnalyzer = new WorkspaceAnalyzer();
   const llmRecommendationCache = new LlmRecommendationCache(context.globalState);

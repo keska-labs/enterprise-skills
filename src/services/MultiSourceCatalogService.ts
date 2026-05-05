@@ -11,6 +11,12 @@ export interface PerSourceResult {
   error?: string;
   /** Failure category — set alongside `error` so callers can branch on auth/network/etc. */
   errorReason?: SyncFailureReason;
+  /** True when `snapshot` was served from cache because the upstream fetch failed. */
+  stale?: boolean;
+  /** Reason the upstream fetch failed; only set when `stale` is true. */
+  staleReason?: SyncFailureReason;
+  /** ISO timestamp of when the upstream is expected to be reachable; only set when `stale` is true. */
+  retryAt?: string;
 }
 
 export interface MergedCatalog {
@@ -43,7 +49,13 @@ export class MultiSourceCatalogService {
       sources.map(async (source) => {
         try {
           const snapshot = await this.catalogService.getCatalog(source, { forceRefresh: opts?.forceRefresh ?? false });
-          return { source, snapshot };
+          const result: PerSourceResult = { source, snapshot };
+          if (snapshot.isStale) {
+            result.stale = true;
+            result.staleReason = snapshot.staleReason;
+            result.retryAt = snapshot.retryAt;
+          }
+          return result;
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           const errorReason: SyncFailureReason = error instanceof ServiceError ? error.reason : "unknown";
