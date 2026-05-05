@@ -18,17 +18,25 @@ Works with **VS Code 1.85+** and **Cursor**.
 
 ## Screenshots
 
-![Browse repository tree](media/preview-browse.png)
-*Browse the repository tree. Folders load on demand from GitHub.*
+### Browse repository tree
 
-![Expanded repository tree](media/preview-syncing.png)
-*Open folders to inspect files before you enable a skill.*
+![Browse repository tree](media/preview-browse.png)
+
+Browse folders on demand from GitHub without loading the full repository at once.
+Inspect folder contents and enable skills.
+
+
+### Full-text catalog search
 
 ![Full-text catalog search](media/preview-search.png)
-*Search the catalog by name, description, and category.*
+
+Search by skill name, description, or category.
+
+### Manage enabled skills
 
 ![Enabled skills list](media/preview-enabled.png)
-*Filter the list and toggle skills on or off with one click.*
+
+Filter enabled items and toggle skills on or off with one click.
 
 ---
 
