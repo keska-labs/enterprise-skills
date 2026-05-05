@@ -1,0 +1,30 @@
+---
+description: Skill Manager webview — React 19, VS Code messaging via acquireVsCodeApi, no Node APIs.
+globs:
+  - webview-ui/**/*.ts
+  - webview-ui/**/*.tsx
+alwaysApply: false
+---
+
+# Webview UI (`webview-ui/`)
+
+## Runtime
+
+- Bundled as **browser** code (`webpack` entry [`webview-ui/main.tsx`](webview-ui/main.tsx) → `dist/webview.js`). No `fs`, `path`, `child_process`, or direct `vscode` module imports.
+
+## VS Code bridge
+
+- Obtain the API once via [`useVsCodeApi`](webview-ui/hooks/useVsCodeApi.ts) → `acquireVsCodeApi()` (injected by VS Code at runtime).
+- Send commands/state with `postMessage`. Message shapes must match [`webview-ui/types/messages.ts`](webview-ui/types/messages.ts).
+
+## React
+
+- Functional components only; React 19. Keep side effects in hooks; subscribe to extension messages in components that own the listener lifecycle.
+
+## Styles
+
+- Import CSS from [`webview-ui/styles/`](webview-ui/styles/); webpack uses `style-loader` + `css-loader`.
+
+## Tests
+
+- Use `@testing-library/react` with jsdom; `vscode` is not available—mock at the hook boundary or test pure components with injected callbacks where needed.

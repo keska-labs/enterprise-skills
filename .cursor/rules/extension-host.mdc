@@ -1,0 +1,31 @@
+---
+description: Extension host patterns for Agent Skill Sync — DI, VS Code API, Logger, ServiceError, disposables.
+globs:
+  - src/**/*.ts
+alwaysApply: false
+---
+
+# Extension host (`src/`)
+
+## Composition
+
+- Wire dependencies in [`src/extension.ts`](src/extension.ts): construct services once, pass into panels and `SyncEngine`.
+- Register everything that implements `vscode.Disposable` via `context.subscriptions.push(...)`.
+
+## Errors and logging
+
+- Use [`Logger`](src/utils/logger.ts) for diagnostics (`log`, `warn`, `error`). The output channel is the primary trace for support.
+- Throw or propagate [`ServiceError`](src/services/ServiceError.ts) with a stable `reason` (`no_session`, `network`, `source_invalid`, …) when the failure maps to user-visible connection/sync health; panels map reasons to UI state where needed.
+
+## Async
+
+- Use `async`/`await`. At fire-and-forget boundaries (e.g. event handlers), use `void this.someAsync()` or `.catch(...)` so unhandled rejections do not crash the host.
+
+## VS Code API
+
+- Externalize `vscode` in webpack; never bundle it. Tests use Jest’s `vscode` alias to [`src/test/vscodeMock.ts`](src/test/vscodeMock.ts).
+
+## Sync and config
+
+- [`ConfigService`](src/services/ConfigService.ts) reads/writes `skillSync.*` keys only.
+- [`SyncEngine`](src/services/SyncEngine.ts) owns periodic sync and emits results; do not duplicate sync loops elsewhere.
