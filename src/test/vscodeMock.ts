@@ -24,11 +24,20 @@ const mockVscode = {
     workspaceFolders: [{
       uri: { fsPath: "/tmp/workspace" }
     }],
+    findFiles: jest.fn().mockResolvedValue([]),
+    asRelativePath: jest.fn((uri: { fsPath?: string } | string) => {
+      if (typeof uri === "string") {
+        return uri.replace(/^\/tmp\/workspace\/?/, "").replace(/^\//, "") || ".";
+      }
+      const p = uri.fsPath ?? "";
+      return p.replace(/^\/tmp\/workspace\/?/, "").replace(/\\/g, "/") || ".";
+    }),
     fs: {
       createDirectory: jest.fn(),
       writeFile: jest.fn(),
       delete: jest.fn(),
-      readDirectory: jest.fn()
+      readDirectory: jest.fn(),
+      readFile: jest.fn().mockResolvedValue(new Uint8Array())
     }
   },
   window: {
@@ -56,7 +65,11 @@ const mockVscode = {
     File: 1
   },
   Uri: {
-    joinPath: (...parts: Array<{ fsPath?: string } | string>) => ({ fsPath: parts.map((p) => (typeof p === "string" ? p : p.fsPath ?? "")).join("/") })
+    joinPath: (...parts: Array<{ fsPath?: string } | string>) => ({ fsPath: parts.map((p) => (typeof p === "string" ? p : p.fsPath ?? "")).join("/") }),
+    file: (p: string) => ({ fsPath: p })
+  },
+  extensions: {
+    all: []
   }
 };
 
