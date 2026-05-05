@@ -66,9 +66,9 @@ export type WebviewMessage =
   | { type: "syncNow" }
   | { type: "toggleSkill"; skillName: string; optIn: boolean }
   | { type: "getState" }
+  | { type: "getCatalog" }
   | { type: "loadBrowseRoot" }
   | { type: "expandBrowsePath"; path: string }
-  | { type: "searchCatalog"; query: string }
   | { type: "requestRecommendations" }
   | { type: "refreshRecommendations" }
   | { type: "askAgentToRecommend" }
@@ -90,7 +90,7 @@ export type ExtensionMessage =
   }
   | { type: "error"; message: string }
   | { type: "browseUpdate"; parentPath: string; entries: BrowseEntry[]; skillsRootPath?: string }
-  | { type: "catalogSearchResults"; query: string; skills: SkillInfo[] }
+  | { type: "catalogResult"; skills: SkillInfo[] }
   | {
     type: "recommendationsResult";
     recommendations: Recommendation[];

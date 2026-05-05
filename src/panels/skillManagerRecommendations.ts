@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { ConfigService } from "../services/ConfigService";
-import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
+import { SkillCatalogStore, currentSourceKey } from "../services/SkillCatalogStore";
 import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { LlmSkillRecommender } from "../services/LlmSkillRecommender";
 import { Recommendation } from "../../webview-ui/types/messages";
@@ -18,10 +18,7 @@ export async function buildRecommendationsPayload(
   source: "llm" | "heuristic";
   providerId?: string;
 }> {
-  const sourceMode = configService.getSourceMode();
-  const sourceRepository = configService.getSourceRepository();
-  const registryUrl = configService.getRegistryUrl();
-  const sourceKey = buildSourceKey(sourceMode, sourceRepository, registryUrl);
+  const sourceKey = currentSourceKey(configService);
   const cached = catalogStore.load(sourceKey);
   if (!cached || cached.metas.length === 0) {
     return { recommendations: [], catalogReady: false, source: "heuristic" };
@@ -56,11 +53,7 @@ export async function buildAskAgentPromptFromContext(
   configService: ConfigService,
   catalogStore: SkillCatalogStore
 ): Promise<string> {
-  const sourceKey = buildSourceKey(
-    configService.getSourceMode(),
-    configService.getSourceRepository(),
-    configService.getRegistryUrl()
-  );
+  const sourceKey = currentSourceKey(configService);
   const cached = catalogStore.load(sourceKey);
   if (!cached || cached.metas.length === 0) {
     return SKILL_RECOMMENDER_CHAT_PROMPT;

@@ -2,9 +2,9 @@ import * as vscode from "vscode";
 import { AuthService } from "../services/AuthService";
 import { ConfigService } from "../services/ConfigService";
 import { RepoService } from "../services/RepoService";
-import { RegistryService } from "../services/RegistryService";
 import { SyncEngine } from "../services/SyncEngine";
-import { SkillCatalogStore } from "../services/SkillCatalogStore";
+import { SkillCatalogStore, currentSourceKey } from "../services/SkillCatalogStore";
+import { CatalogService } from "../services/CatalogService";
 import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
@@ -15,11 +15,11 @@ import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } f
 import { seedChatWithPrompt } from "../utils/chatPrompt";
 import {
   handleGithubExpandBrowsePath,
-  handleGithubLoadBrowseRoot,
-  handleGithubSearchCatalog
+  handleGithubLoadBrowseRoot
 } from "./skillManagerBrowse";
 import { ServiceError } from "../services/ServiceError";
 import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
+import { SkillMeta } from "../types";
 
 export class SkillManagerPanel {
   private static currentPanel: SkillManagerPanel | undefined;
@@ -31,10 +31,10 @@ export class SkillManagerPanel {
     authService: AuthService,
     configService: ConfigService,
     repoService: RepoService,
-    registryService: RegistryService,
     syncEngine: SyncEngine,
     logger: Logger,
     catalogStore: SkillCatalogStore,
+    catalogService: CatalogService,
     workspaceAnalyzer: WorkspaceAnalyzer,
     llmSkillRecommender: LlmSkillRecommender,
     configureSourceFn: typeof configureSource
@@ -60,10 +60,10 @@ export class SkillManagerPanel {
       authService,
       configService,
       repoService,
-      registryService,
       syncEngine,
       logger,
       catalogStore,
+      catalogService,
       workspaceAnalyzer,
       llmSkillRecommender,
       configureSourceFn
@@ -79,10 +79,10 @@ export class SkillManagerPanel {
     private readonly authService: AuthService,
     private readonly configService: ConfigService,
     private readonly repoService: RepoService,
-    private readonly registryService: RegistryService,
     private readonly syncEngine: SyncEngine,
     private readonly logger: Logger,
     private readonly catalogStore: SkillCatalogStore,
+    private readonly catalogService: CatalogService,
     private readonly workspaceAnalyzer: WorkspaceAnalyzer,
     private readonly llmSkillRecommender: LlmSkillRecommender,
     private readonly configureSourceFn: typeof configureSource
@@ -156,6 +156,7 @@ export class SkillManagerPanel {
       case "loadBrowseRoot": {
         await handleGithubLoadBrowseRoot(
           this.configService,
+          this.catalogService,
           this.repoService,
           this.catalogStore,
           (msg) => this.panel.webview.postMessage(msg)
@@ -166,6 +167,7 @@ export class SkillManagerPanel {
       case "expandBrowsePath": {
         await handleGithubExpandBrowsePath(
           this.configService,
+          this.catalogService,
           this.repoService,
           this.catalogStore,
           message.path,
@@ -174,15 +176,12 @@ export class SkillManagerPanel {
         await this.postState();
         break;
       }
-      case "searchCatalog": {
-        await handleGithubSearchCatalog(
-          this.configService,
-          this.repoService,
-          this.catalogStore,
-          message.query,
-          (msg) => this.panel.webview.postMessage(msg)
-        );
-        await this.postState();
+      case "getCatalog": {
+        const snapshot = await this.catalogService.getCatalog(currentSourceKey(this.configService));
+        this.panel.webview.postMessage({
+          type: "catalogResult",
+          skills: snapshot.metas.map(metaToSkillInfo)
+        });
         break;
       }
       case "tabChanged": {
@@ -275,12 +274,13 @@ export class SkillManagerPanel {
   private async buildState(): Promise<SkillManagerState> {
     return buildSkillManagerState({
       configService: this.configService,
-      registryService: this.registryService,
       syncEngine: this.syncEngine,
       logger: this.logger,
-      catalogStore: this.catalogStore
+      catalogStore: this.catalogStore,
+      catalogService: this.catalogService
     });
   }
+
 }
 
 function mapServiceReasonToHealth(reason: string): SkillManagerState["connectionHealth"] {
@@ -294,4 +294,15 @@ function mapServiceReasonToHealth(reason: string): SkillManagerState["connection
     return "invalid_source";
   }
   return "unknown";
+}
+
+function metaToSkillInfo(meta: SkillMeta) {
+  return {
+    name: meta.name,
+    description: meta.description ?? "",
+    version: meta.version ?? meta.shaOrVersion.slice(0, 7),
+    category: meta.category ?? "Uncategorized",
+    skillType: meta.skillType,
+    fileCount: meta.skillFiles?.length
+  };
 }

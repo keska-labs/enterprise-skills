@@ -44,7 +44,8 @@ export function App(): React.JSX.Element {
   const [browseTreeLoading, setBrowseTreeLoading] = useState(false);
   const [expandingPath, setExpandingPath] = useState<string | null>(null);
   const [catalogQuery, setCatalogQuery] = useState("");
-  const [catalogSearchResults, setCatalogSearchResults] = useState<SkillInfo[] | null>(null);
+  const [catalogSkills, setCatalogSkills] = useState<SkillInfo[]>([]);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
   const [catalogSearching, setCatalogSearching] = useState(false);
   const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
@@ -88,8 +89,9 @@ export function App(): React.JSX.Element {
           setBrowseTreeLoading(false);
         }
         setExpandingPath(null);
-      } else if (data.type === "catalogSearchResults") {
-        setCatalogSearchResults(data.skills);
+      } else if (data.type === "catalogResult") {
+        setCatalogSkills(data.skills);
+        setCatalogLoaded(true);
         setCatalogSearching(false);
       } else if (data.type === "recommendationsResult") {
         setRecommendations(data.recommendations);
@@ -113,7 +115,8 @@ export function App(): React.JSX.Element {
       setBrowseChildren({});
       setCollapsedBrowsePaths(new Set());
       setBrowseSkillsRoot(null);
-      setCatalogSearchResults(null);
+      setCatalogSkills([]);
+      setCatalogLoaded(false);
       setCatalogQuery("");
       setBrowseTreeLoading(false);
       setCatalogSearching(false);
@@ -160,18 +163,28 @@ export function App(): React.JSX.Element {
       setCatalogSearching(false);
       return;
     }
-    const handle = window.setTimeout(() => {
-      const q = catalogQuery.trim();
-      if (q.length < 2) {
-        setCatalogSearchResults(null);
-        setCatalogSearching(false);
-        return;
-      }
-      setCatalogSearching(true);
-      vscode.postMessage({ type: "searchCatalog", query: q });
-    }, 450);
-    return () => window.clearTimeout(handle);
-  }, [catalogQuery, mainTab, vscode]);
+    if (state?.sourceMode !== "github-repo") {
+      return;
+    }
+    if (catalogLoaded || catalogSearching) {
+      return;
+    }
+    setCatalogSearching(true);
+    vscode.postMessage({ type: "getCatalog" });
+  }, [catalogLoaded, catalogSearching, mainTab, state?.sourceMode, vscode]);
+
+  const filteredCatalogResults = useMemo(() => {
+    const q = catalogQuery.trim().toLowerCase();
+    if (q.length < 2) {
+      return [];
+    }
+    return catalogSkills.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        s.category.toLowerCase().includes(q)
+    );
+  }, [catalogQuery, catalogSkills]);
 
   const categories = useMemo(() => state?.categories ?? [], [state]);
   const isConnected = Boolean(state?.isConnected);
@@ -528,14 +541,14 @@ export function App(): React.JSX.Element {
               </div>
 
               {catalogQuery.trim().length >= 2 ? (
-                catalogSearchResults && catalogSearchResults.length > 0 ? (
+                filteredCatalogResults.length > 0 ? (
                   <CategoryGroup
                     variant="results"
-                    category={{ name: "Results", skills: catalogSearchResults }}
+                    category={{ name: "Results", skills: filteredCatalogResults }}
                     optedInSkills={state?.optedInSkills ?? []}
                     onToggle={onToggle}
                   />
-                ) : !catalogSearching && catalogSearchResults !== null ? (
+                ) : !catalogSearching && catalogLoaded ? (
                   <p className="no-results">No skills matched "{catalogQuery.trim()}".</p>
                 ) : null
               ) : (

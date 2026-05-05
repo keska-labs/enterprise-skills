@@ -1,25 +1,24 @@
 import * as vscode from "vscode";
 import { ConfigService } from "../services/ConfigService";
-import { RegistryService } from "../services/RegistryService";
 import { SyncEngine } from "../services/SyncEngine";
 import { Logger } from "../utils/logger";
 import { deleteSkillFile, deleteSkillPackage, listExistingSkillFiles, listExistingSkillPackages } from "../utils/fileUtils";
 import { ServiceError } from "../services/ServiceError";
-import { SkillCatalogStore, buildSourceKey } from "../services/SkillCatalogStore";
+import { SkillCatalogStore, currentSourceKey } from "../services/SkillCatalogStore";
+import { CatalogService } from "../services/CatalogService";
 import { CategoryData, SkillInfo, SkillManagerState } from "../../webview-ui/types/messages";
 import { SkillMeta } from "../types";
-import { persistCatalogManifestFromStore } from "../utils/catalogManifest";
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
-  registryService: RegistryService;
   syncEngine: SyncEngine;
   logger: Logger;
   catalogStore: SkillCatalogStore;
+  catalogService: CatalogService;
 }
 
 export async function buildSkillManagerState(deps: SkillManagerStateDependencies): Promise<SkillManagerState> {
-  const { configService, registryService, syncEngine, logger, catalogStore } = deps;
+  const { configService, syncEngine, logger, catalogStore, catalogService } = deps;
   const sourceMode = configService.getSourceMode();
   const sourceRepository = configService.getSourceRepository();
   const registryUrl = configService.getRegistryUrl();
@@ -27,7 +26,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
   const categories = configService.getCategories();
   const lastResult = syncEngine.getLastResult();
 
-  const sourceKey = buildSourceKey(sourceMode, sourceRepository, registryUrl);
+  const sourceKey = currentSourceKey(configService);
   const cached = catalogStore.load(sourceKey);
   let catalogSize = cached?.metas.length ?? 0;
 
@@ -58,12 +57,9 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
   } else {
     isConnected = true;
     try {
-      const skills = await registryService.listSkills();
+      const skills = (await catalogService.getCatalog(sourceKey)).metas;
       registryCategories = categorizeSkills(registryCategories, skills);
       connectionHealth = "ok";
-      const registryKey = buildSourceKey("custom-registry", "", registryUrl);
-      catalogStore.save(registryKey, "", skills);
-      persistCatalogManifestFromStore(catalogStore, registryKey);
       catalogSize = skills.length;
     } catch (error) {
       logger.error("Failed to build skill manager state (registry)", error);
@@ -150,11 +146,7 @@ export async function disconnectSource(configService: ConfigService, catalogStor
     return false;
   }
 
-  const sourceKey = buildSourceKey(
-    configService.getSourceMode(),
-    configService.getSourceRepository(),
-    configService.getRegistryUrl()
-  );
+  const sourceKey = currentSourceKey(configService);
   catalogStore.clear(sourceKey);
 
   await configService.setSourceRepository("");
