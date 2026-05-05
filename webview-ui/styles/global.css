@@ -407,18 +407,21 @@ code {
 }
 
 .skill-source-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 1px 6px;
+  /* `inline-block` (not `inline-flex`) so `text-overflow: ellipsis` actually
+     truncates instead of just clipping at the rounded corner. */
+  display: inline-block;
+  vertical-align: middle;
+  padding: 1px 8px;
   border-radius: 3px;
   font-size: 10px;
+  line-height: 1.5;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
   color: var(--vscode-descriptionForeground);
   background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
   white-space: nowrap;
-  max-width: 120px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
