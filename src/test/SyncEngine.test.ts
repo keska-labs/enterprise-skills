@@ -1,3 +1,4 @@
+import * as vscode from "vscode";
 import { SyncEngine } from "../services/SyncEngine";
 import { AuthService } from "../services/AuthService";
 import { ConfigService } from "../services/ConfigService";
@@ -18,7 +19,8 @@ describe("SyncEngine", () => {
     const config = {
       getOptedInSkills: jest.fn().mockReturnValue(["skill-a"]),
       getSourceMode: jest.fn().mockReturnValue("github-repo"),
-      getSourceRepository: jest.fn().mockReturnValue("owner/repo")
+      getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      isSourceConfigured: jest.fn().mockReturnValue(true)
     } as unknown as ConfigService;
     const repo = {
       listSkillsInRepo: jest.fn().mockResolvedValue([{ name: "skill-a", path: "skills/skill-a.mdc", shaOrVersion: "abc1234" }]),
@@ -46,7 +48,8 @@ describe("SyncEngine", () => {
     const config = {
       getOptedInSkills: jest.fn().mockReturnValue([]),
       getSourceMode: jest.fn().mockReturnValue("github-repo"),
-      getSourceRepository: jest.fn().mockReturnValue("owner/repo")
+      getSourceRepository: jest.fn().mockReturnValue("owner/repo"),
+      isSourceConfigured: jest.fn().mockReturnValue(true)
     } as unknown as ConfigService;
     const repo = {} as RepoService;
     const registry = {} as RegistryService;
@@ -63,7 +66,9 @@ describe("SyncEngine", () => {
     const auth = {
       getToken: jest.fn().mockRejectedValue(new ServiceError("auth_expired", "GitHub authorization expired."))
     } as unknown as AuthService;
-    const config = {} as ConfigService;
+    const config = {
+      isSourceConfigured: jest.fn().mockReturnValue(true)
+    } as unknown as ConfigService;
     const repo = {} as RepoService;
     const registry = {} as RegistryService;
     const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
@@ -73,5 +78,27 @@ describe("SyncEngine", () => {
     const result = await engine.sync(true);
     expect(result.status).toBe("failed");
     expect(result.reason).toBe("auth_expired");
+  });
+
+  it("skips background sync without auth or warning when source is not configured", async () => {
+    const auth = { getToken: jest.fn() } as unknown as AuthService;
+    const config = {
+      isSourceConfigured: jest.fn().mockReturnValue(false)
+    } as unknown as ConfigService;
+    const repo = {} as RepoService;
+    const registry = {} as RegistryService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const catalogStore = {} as SkillCatalogStore;
+    (vscode.window.showWarningMessage as jest.Mock).mockClear();
+    const showWarning = jest.spyOn(vscode.window, "showWarningMessage");
+
+    const engine = new SyncEngine(auth, config, repo, registry, logger, catalogStore);
+    const result = await engine.sync(false);
+
+    expect(auth.getToken).not.toHaveBeenCalled();
+    expect(result.status).toBe("skipped");
+    expect(result.reason).toBe("source_invalid");
+    expect(showWarning).not.toHaveBeenCalled();
+    showWarning.mockRestore();
   });
 });

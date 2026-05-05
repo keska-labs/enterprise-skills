@@ -9,6 +9,7 @@ import { configureSource, registerCommands } from "./commands/registerCommands";
 import { SkillManagerPanel } from "./panels/SkillManagerPanel";
 import { SkillManagerSidebarProvider } from "./panels/SkillManagerSidebarProvider";
 import { SkillCatalogStore } from "./services/SkillCatalogStore";
+import { maybeShowConfigurePrompt } from "./utils/welcomePrompt";
 
 let syncEngineRef: SyncEngine | undefined;
 let loggerRef: Logger | undefined;
@@ -85,7 +86,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(statusBarItem);
   context.subscriptions.push(syncEngine, { dispose: () => logger.dispose() });
   syncEngine.startScheduler();
-  void syncEngine.sync(false);
+  if (configService.isSourceConfigured()) {
+    void syncEngine.sync(false);
+  } else {
+    void maybeShowConfigurePrompt(context, configService, syncEngine);
+  }
 }
 
 export function deactivate(): void {

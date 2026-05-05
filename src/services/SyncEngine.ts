@@ -60,6 +60,13 @@ export class SyncEngine implements vscode.Disposable {
   public async sync(isManual: boolean): Promise<SyncResult> {
     const result = this.createResult("skipped", "unknown", "Sync did not run.");
 
+    if (!isManual && !this.configService.isSourceConfigured()) {
+      result.reason = "source_invalid";
+      result.message = "Skill source is not configured; background sync skipped.";
+      this.emitResult(result, isManual);
+      return result;
+    }
+
     try {
       const token = await this.authService.getToken(isManual);
       if (!token) {
