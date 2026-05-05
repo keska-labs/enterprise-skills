@@ -5,9 +5,11 @@ import { RepoService } from "../services/RepoService";
 import { RegistryService } from "../services/RegistryService";
 import { SyncEngine } from "../services/SyncEngine";
 import { SkillCatalogStore } from "../services/SkillCatalogStore";
+import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { Logger } from "../utils/logger";
 import { configureSource } from "../commands/registerCommands";
 import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
+import { buildRecommendationsPayload } from "./skillManagerRecommendations";
 import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
 import {
   handleGithubExpandBrowsePath,
@@ -20,6 +22,7 @@ import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
 export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "skillSync.sidebarManager";
   private view?: vscode.WebviewView;
+  private recommendedTabActive = false;
 
   public constructor(
     private readonly extensionUri: vscode.Uri,
@@ -29,10 +32,14 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
     private readonly registryService: RegistryService,
     private readonly syncEngine: SyncEngine,
     private readonly logger: Logger,
-    private readonly catalogStore: SkillCatalogStore
+    private readonly catalogStore: SkillCatalogStore,
+    private readonly workspaceAnalyzer: WorkspaceAnalyzer
   ) {
     this.syncEngine.onSyncComplete(() => {
       void this.postState();
+      if (this.recommendedTabActive) {
+        void this.sendRecommendations();
+      }
     });
   }
 
@@ -129,6 +136,28 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         await this.postState();
         break;
       }
+      case "tabChanged": {
+        this.recommendedTabActive = message.tab === "recommended";
+        break;
+      }
+      case "requestRecommendations": {
+        await this.sendRecommendations();
+        break;
+      }
+    }
+  }
+
+  private async sendRecommendations(): Promise<void> {
+    try {
+      const payload = await buildRecommendationsPayload(this.workspaceAnalyzer, this.configService, this.catalogStore);
+      this.view?.webview.postMessage({ type: "recommendationsResult", ...payload });
+    } catch (error: unknown) {
+      this.logger.error("Recommendations failed", error);
+      this.view?.webview.postMessage({
+        type: "recommendationsResult",
+        recommendations: [],
+        catalogReady: false
+      });
     }
   }
 

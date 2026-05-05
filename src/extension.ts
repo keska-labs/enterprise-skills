@@ -9,6 +9,7 @@ import { configureSource, registerCommands } from "./commands/registerCommands";
 import { SkillManagerPanel } from "./panels/SkillManagerPanel";
 import { SkillManagerSidebarProvider } from "./panels/SkillManagerSidebarProvider";
 import { SkillCatalogStore } from "./services/SkillCatalogStore";
+import { WorkspaceAnalyzer } from "./services/WorkspaceAnalyzer";
 import { maybeShowConfigurePrompt } from "./utils/welcomePrompt";
 
 let syncEngineRef: SyncEngine | undefined;
@@ -27,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const repoService = new RepoService(authService);
   const registryService = new RegistryService(authService, configService);
   const catalogStore = new SkillCatalogStore(context.globalState);
+  const workspaceAnalyzer = new WorkspaceAnalyzer();
   const syncEngine = new SyncEngine(
     authService,
     configService,
@@ -43,7 +45,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     registryService,
     syncEngine,
     logger,
-    catalogStore
+    catalogStore,
+    workspaceAnalyzer
   );
 
   syncEngineRef = syncEngine;
@@ -67,6 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           syncEngine,
           logger,
           catalogStore,
+          workspaceAnalyzer,
           configureSource
         );
       });
