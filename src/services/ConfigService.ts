@@ -41,4 +41,13 @@ export class ConfigService {
   public async setOptedInSkills(skills: string[]): Promise<void> {
     await this.config.update("optedInSkills", skills, vscode.ConfigurationTarget.Workspace);
   }
+
+  /** True when the active source mode has the minimum settings needed to fetch skills. */
+  public isSourceConfigured(): boolean {
+    const mode = this.getSourceMode();
+    if (mode === "github-repo") {
+      return this.getSourceRepository().trim().length > 0;
+    }
+    return this.getRegistryUrl().trim().length > 0;
+  }
 }
