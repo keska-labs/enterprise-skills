@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -68,11 +68,19 @@
       },
       {
         "command": "skillSync.configureSource",
-        "title": "Skill Sync: Configure Source"
+        "title": "Skill Sync: Add Skill Source"
+      },
+      {
+        "command": "skillSync.removeSource",
+        "title": "Skill Sync: Remove Skill Source"
       },
       {
         "command": "skillSync.syncNow",
         "title": "Skill Sync: Sync Now"
+      },
+      {
+        "command": "skillSync.signIn",
+        "title": "Skill Sync: Sign In to GitHub"
       },
       {
         "command": "skillSync.focusSidebar",
@@ -105,21 +113,48 @@
     "configuration": {
       "title": "Agent Skill Sync",
       "properties": {
+        "skillSync.sources": {
+          "type": "array",
+          "default": [],
+          "description": "Ordered list of skill sources. Each source is fetched independently and merged into the workspace catalog. Cursor rules and skill packages are written under namespaced folders (`.cursor/rules/<label>/`, `.cursor/skills/<label>/`).",
+          "items": {
+            "type": "object",
+            "required": ["type", "value"],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["github-repo", "custom-registry"],
+                "description": "Source kind: GitHub repository (`owner/repo`) or custom HTTPS registry."
+              },
+              "value": {
+                "type": "string",
+                "description": "GitHub `owner/repo` or registry base URL."
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional short label used as the workspace folder prefix and as the source badge in the UI. Auto-derived when omitted (repo segment for GitHub, hostname for registries)."
+              }
+            }
+          }
+        },
         "skillSync.sourceMode": {
           "type": "string",
           "enum": [
             "github-repo",
             "custom-registry"
           ],
-          "default": "github-repo"
+          "default": "github-repo",
+          "deprecationMessage": "Deprecated. Use `skillSync.sources` instead. Read-only fallback for one release while the extension auto-migrates existing workspaces."
         },
         "skillSync.sourceRepository": {
           "type": "string",
-          "default": ""
+          "default": "",
+          "deprecationMessage": "Deprecated. Use `skillSync.sources` instead."
         },
         "skillSync.registryUrl": {
           "type": "string",
-          "default": ""
+          "default": "",
+          "deprecationMessage": "Deprecated. Use `skillSync.sources` instead."
         },
         "skillSync.categories": {
           "type": "array",

@@ -1,10 +1,31 @@
 export type SourceMode = "github-repo" | "custom-registry";
+export type SourceType = SourceMode;
 
 export interface RepoInfo {
   id: number;
   fullName: string;
   description?: string;
   private: boolean;
+}
+
+/**
+ * One configured upstream of skills. Persisted to settings as part of `skillSync.sources`.
+ *
+ * `value` is the repo `owner/repo` for `github-repo`, or the registry base URL for `custom-registry`.
+ * `label` is optional; when omitted, callers derive a stable label from `value` via `deriveSourceLabel`.
+ */
+export interface SourceConfig {
+  type: SourceType;
+  value: string;
+  label?: string;
+}
+
+/** Identity of a source resolved at runtime — `label` is always present, derived if not user-set. */
+export interface ResolvedSource {
+  type: SourceType;
+  value: string;
+  label: string;
+  sourceKey: string;
 }
 
 /**
@@ -34,6 +55,15 @@ export interface SkillMeta {
   /** For skill packages: absolute repo paths of all files within the package directory. */
   skillFiles?: string[];
   triggers?: SkillTriggers;
+  /** Optional source provenance — set by the multi-source orchestrator. */
+  source?: SkillMetaSource;
+}
+
+export interface SkillMetaSource {
+  type: SourceType;
+  value: string;
+  label: string;
+  sourceKey: string;
 }
 
 export interface SkillContent {
