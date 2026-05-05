@@ -31,6 +31,7 @@ export function App(): React.JSX.Element {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [syncFailed, setSyncFailed] = useState(false);
   const [browseChildren, setBrowseChildren] = useState<Record<string, BrowseEntry[]>>({});
+  const [collapsedBrowsePaths, setCollapsedBrowsePaths] = useState<Set<string>>(new Set());
   const [browseSkillsRoot, setBrowseSkillsRoot] = useState<string | null>(null);
   const [browseTreeLoading, setBrowseTreeLoading] = useState(false);
   const [expandingPath, setExpandingPath] = useState<string | null>(null);
@@ -91,6 +92,7 @@ export function App(): React.JSX.Element {
     const key = `${state.sourceRepository}|${state.sourceMode}`;
     if (prevSourceKey.current !== null && prevSourceKey.current !== key) {
       setBrowseChildren({});
+      setCollapsedBrowsePaths(new Set());
       setBrowseSkillsRoot(null);
       setCatalogSearchResults(null);
       setCatalogQuery("");
@@ -194,6 +196,15 @@ export function App(): React.JSX.Element {
   const onExpandDir = useCallback(
     (fullPath: string) => {
       if (browseChildren[fullPath]) {
+        setCollapsedBrowsePaths((prev) => {
+          const next = new Set(prev);
+          if (next.has(fullPath)) {
+            next.delete(fullPath);
+          } else {
+            next.add(fullPath);
+          }
+          return next;
+        });
         return;
       }
       setExpandingPath(fullPath);
@@ -400,6 +411,7 @@ export function App(): React.JSX.Element {
                       <BrowseTree
                         entries={rootEntries}
                         browseChildren={browseChildren}
+                        collapsedPaths={collapsedBrowsePaths}
                         expandingPath={expandingPath}
                         onExpandDir={onExpandDir}
                       />

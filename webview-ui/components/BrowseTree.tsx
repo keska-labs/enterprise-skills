@@ -5,6 +5,7 @@ import { IconFile, IconFolder } from "./icons";
 interface BrowseTreeProps {
   entries: BrowseEntry[];
   browseChildren: Record<string, BrowseEntry[]>;
+  collapsedPaths: Set<string>;
   expandingPath: string | null;
   onExpandDir: (fullPath: string) => void;
 }
@@ -27,26 +28,34 @@ export function BrowseTree(props: BrowseTreeProps): React.JSX.Element {
         <li key={entry.path} className="browse-tree-item">
           {entry.type === "dir" ? (
             <>
+              {(() => {
+                const isLoaded = props.browseChildren[entry.path] !== undefined;
+                const isCollapsed = props.collapsedPaths.has(entry.path);
+                const isExpanded = isLoaded && !isCollapsed;
+                return (
               <button
                 type="button"
                 className="browse-dir"
                 onClick={() => props.onExpandDir(entry.path)}
                 disabled={props.expandingPath === entry.path}
-                aria-expanded={props.browseChildren[entry.path] !== undefined}
+                aria-expanded={isExpanded}
               >
                 <span className="browse-dir-glyph" aria-hidden>
                   <IconFolder />
                 </span>
                 <span className="browse-chevron" aria-hidden>
-                  {props.browseChildren[entry.path] ? "▾" : "▸"}
+                  {isExpanded ? "▾" : "▸"}
                 </span>
                 <span className="browse-name">{entry.name}</span>
                 {props.expandingPath === entry.path ? <span className="browse-loading-inline">Loading…</span> : null}
               </button>
-              {props.browseChildren[entry.path] ? (
+                );
+              })()}
+              {props.browseChildren[entry.path] && !props.collapsedPaths.has(entry.path) ? (
                 <BrowseTree
                   entries={props.browseChildren[entry.path]!}
                   browseChildren={props.browseChildren}
+                  collapsedPaths={props.collapsedPaths}
                   expandingPath={props.expandingPath}
                   onExpandDir={props.onExpandDir}
                 />
