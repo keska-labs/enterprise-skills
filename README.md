@@ -52,6 +52,14 @@ Filter enabled items and toggle skills on or off with one click.
 - Optionally use a **custom registry** with category-based listing.
 - Sign in with GitHub for private repos (scopes include reading repositories you can access).
 
+### AI-powered recommendations (Recommended tab)
+
+- The **Recommended** tab ranks catalog skills against your workspace using trigger metadata and lightweight repo signals.
+- With **`skillSync.recommendations.useLanguageModel`** enabled (default), it tries **VS Code’s Language Model API** (`vscode.lm`, e.g. Copilot), then optional keys for **Cursor SDK**, **OpenAI**, and **Anthropic** — configure keys via the Command Palette (`Skill Sync: Set … Recommendation Key`). Keys are stored in **Secret Storage**, not `settings.json`.
+- If no provider is available, results fall back to **heuristic** ranking (badge in the UI). Use **Refresh** to bypass the TTL cache.
+- **Ask the Agent** opens chat with a seeded prompt so the **Cursor plugin** subagent in this repo (`cursor-plugin/agents/skill-recommender.md`) can rank skills using your Cursor subscription — no API key. Install the plugin from this repository per [Cursor Plugins](https://cursor.com/docs/reference/plugins).
+- After sync or browse, the extension writes **`.cursor/skill-sync/catalog.json`** (skill metadata only) so the subagent can read the live catalog.
+
 ---
 
 ## How a GitHub skills repo is laid out
