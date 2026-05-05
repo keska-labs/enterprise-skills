@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0
+
+- **Recommended skills:** added a Recommended tab in Skill Manager that ranks relevant skills from workspace signals (languages, dependencies, path markers, installed extensions, and `AGENTS.md`) plus `metadata.triggers` scoring.
+- **Browse selection in repository tree:** added checkbox-based selection in Browse so skills can be enabled directly from the tree view.
+- **Selection behavior aligned with search:** Browse now differentiates skill packages and standalone rule files using the same model as catalog search (package folder vs single-file rule), while avoiding partial selection of files inside a detected skill package.
+
 ## 0.4.0
 
 - **Plugin loading improvements:** startup and loading flow in the extension was refined for a more reliable first-run experience, including clearer handling around setup/welcome prompt states.
