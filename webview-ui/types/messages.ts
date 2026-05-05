@@ -21,6 +21,8 @@ export interface Recommendation {
   score: number;
   reasons: string[];
   matchKind: RecommendationMatchKind;
+  /** Primary LLM explanation when ranked by a language model. */
+  aiReason?: string;
 }
 
 export interface CategoryData {
@@ -68,6 +70,8 @@ export type WebviewMessage =
   | { type: "expandBrowsePath"; path: string }
   | { type: "searchCatalog"; query: string }
   | { type: "requestRecommendations" }
+  | { type: "refreshRecommendations" }
+  | { type: "askAgentToRecommend" }
   | { type: "tabChanged"; tab: SkillManagerMainTab };
 
 export type ExtensionMessage =
@@ -87,4 +91,10 @@ export type ExtensionMessage =
   | { type: "error"; message: string }
   | { type: "browseUpdate"; parentPath: string; entries: BrowseEntry[]; skillsRootPath?: string }
   | { type: "catalogSearchResults"; query: string; skills: SkillInfo[] }
-  | { type: "recommendationsResult"; recommendations: Recommendation[]; catalogReady: boolean };
+  | {
+    type: "recommendationsResult";
+    recommendations: Recommendation[];
+    catalogReady: boolean;
+    source: "llm" | "heuristic";
+    providerId?: string;
+  };

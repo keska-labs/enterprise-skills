@@ -49,6 +49,8 @@ export function App(): React.JSX.Element {
   const [recommendations, setRecommendations] = useState<Recommendation[] | null>(null);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [recCatalogReady, setRecCatalogReady] = useState(false);
+  const [recSource, setRecSource] = useState<"llm" | "heuristic">("heuristic");
+  const [recProviderId, setRecProviderId] = useState<string | undefined>();
 
   const prevSourceKey = useRef<string | null>(null);
   const stateRef = useRef<SkillManagerState | null>(null);
@@ -92,6 +94,8 @@ export function App(): React.JSX.Element {
       } else if (data.type === "recommendationsResult") {
         setRecommendations(data.recommendations);
         setRecCatalogReady(data.catalogReady);
+        setRecSource(data.catalogReady ? data.source : "heuristic");
+        setRecProviderId(data.providerId);
         setRecommendationsLoading(false);
       }
     };
@@ -116,6 +120,8 @@ export function App(): React.JSX.Element {
       setRecommendations(null);
       setRecCatalogReady(false);
       setRecommendationsLoading(false);
+      setRecSource("heuristic");
+      setRecProviderId(undefined);
     }
     prevSourceKey.current = key;
   }, [state?.sourceRepository, state?.sourceMode]);
@@ -228,6 +234,15 @@ export function App(): React.JSX.Element {
   const onToggle = (skillName: string, optIn: boolean) => {
     setIsSyncing(true);
     vscode.postMessage({ type: "toggleSkill", skillName, optIn });
+  };
+
+  const onRefreshRecommendations = () => {
+    setRecommendationsLoading(true);
+    vscode.postMessage({ type: "refreshRecommendations" });
+  };
+
+  const onAskAgentRecommend = () => {
+    vscode.postMessage({ type: "askAgentToRecommend" });
   };
 
   const onExpandDir = useCallback(
@@ -384,30 +399,58 @@ export function App(): React.JSX.Element {
                     <span /><span /><span />
                   </div>
                 </div>
-              ) : !recCatalogReady ? (
-                <section className="callout-card callout-card--subtle">
-                  <div className="callout-body">
-                    <h2 className="callout-title">Catalog not ready</h2>
-                    <p className="callout-text">
-                      Run a sync (or open Browse once) so skills are cached from your source. Then open this tab again.
+              ) : (
+                <>
+                  {recCatalogReady ? (
+                    <div className="recommended-toolbar" role="toolbar" aria-label="Recommendation actions">
+                      <span
+                        className={`rec-source-badge${recSource === "llm" ? " rec-source-badge--ai" : " rec-source-badge--muted"}`}
+                      >
+                        {recSource === "llm" ? "AI-ranked" : "Heuristic"}
+                      </span>
+                      {recProviderId ? (
+                        <span className="rec-provider-hint" title="LLM provider used for ranking">
+                          via {recProviderId}
+                        </span>
+                      ) : null}
+                      <button type="button" className="rec-toolbar-button" onClick={onRefreshRecommendations}>
+                        Refresh
+                      </button>
+                      <button
+                        type="button"
+                        className="rec-toolbar-button rec-toolbar-button--secondary"
+                        onClick={onAskAgentRecommend}
+                      >
+                        Ask the Agent
+                      </button>
+                    </div>
+                  ) : null}
+                  {!recCatalogReady ? (
+                    <section className="callout-card callout-card--subtle">
+                      <div className="callout-body">
+                        <h2 className="callout-title">Catalog not ready</h2>
+                        <p className="callout-text">
+                          Run a sync (or open Browse once) so skills are cached from your source. Then open this tab again.
+                        </p>
+                        <button type="button" className="button cta-button callout-cta" onClick={onSyncNow}>
+                          Sync now
+                        </button>
+                      </div>
+                    </section>
+                  ) : recommendations && recommendations.length === 0 ? (
+                    <p className="recommended-empty">
+                      No recommendations yet for this workspace. Try <strong>Sync now</strong> to refresh the catalog, use{" "}
+                      <strong>Browse</strong> to explore, or enable skills from <strong>Manage</strong>.
                     </p>
-                    <button type="button" className="button cta-button callout-cta" onClick={onSyncNow}>
-                      Sync now
-                    </button>
-                  </div>
-                </section>
-              ) : recommendations && recommendations.length === 0 ? (
-                <p className="recommended-empty">
-                  No recommendations yet for this workspace. Try <strong>Sync now</strong> to refresh the catalog, use{" "}
-                  <strong>Browse</strong> to explore, or enable skills from <strong>Manage</strong>.
-                </p>
-              ) : recommendations ? (
-                <RecommendedSkillList
-                  recommendations={recommendations}
-                  optedInSkills={state?.optedInSkills ?? []}
-                  onToggle={onToggle}
-                />
-              ) : null}
+                  ) : recommendations ? (
+                    <RecommendedSkillList
+                      recommendations={recommendations}
+                      optedInSkills={state?.optedInSkills ?? []}
+                      onToggle={onToggle}
+                    />
+                  ) : null}
+                </>
+              )}
             </div>
           ) : mainTab === "manage" ? (
             <div id="tab-panel-manage" role="tabpanel" aria-labelledby="tab-manage">
