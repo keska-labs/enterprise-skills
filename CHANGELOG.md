@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+
+- **Plugin loading improvements:** startup and loading flow in the extension was refined for a more reliable first-run experience, including clearer handling around setup/welcome prompt states.
+- **Browse tree fix:** directory expand/collapse behavior in the Browse tab was corrected so nested paths toggle consistently.
+
 ## 0.3.1
 
 - **Removed telemetry:** optional Google Analytics / gtag and all extension-owned Skill Manager usage events are removed. Settings `skillSync.ga4MeasurementId` and `skillSync.ga4AllowWithoutProductTelemetry` are deleted. The webview CSP no longer allows Google domains.
