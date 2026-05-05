@@ -40,7 +40,8 @@ const mockVscode = {
       writeFile: jest.fn(),
       delete: jest.fn(),
       readDirectory: jest.fn(),
-      readFile: jest.fn().mockResolvedValue(new Uint8Array())
+      readFile: jest.fn().mockResolvedValue(new Uint8Array()),
+      rename: jest.fn().mockResolvedValue(undefined)
     }
   },
   window: {
@@ -94,7 +95,8 @@ const mockVscode = {
     Notification: 1
   },
   FileType: {
-    File: 1
+    File: 1,
+    Directory: 2
   },
   Uri: {
     joinPath: (...parts: Array<{ fsPath?: string } | string>) => ({ fsPath: parts.map((p) => (typeof p === "string" ? p : p.fsPath ?? "")).join("/") }),
