@@ -70,7 +70,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     catalogService,
     multiSourceService,
     workspaceAnalyzer,
-    llmSkillRecommender
+    llmSkillRecommender,
+    providerRegistry
   );
 
   syncEngineRef = syncEngine;
@@ -98,6 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           multiSourceService,
           workspaceAnalyzer,
           llmSkillRecommender,
+          providerRegistry,
           configureSource
         );
       });

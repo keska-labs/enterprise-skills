@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { SkillMeta } from "../types";
 import { WorkspaceProfile } from "../services/WorkspaceAnalyzer";
+import { DiscoveryPromptSection } from "../services/discoveryPrompt";
 
 const COMMAND_CANDIDATES = [
   "composer.startComposerPrompt",
@@ -75,7 +76,8 @@ function formatSkillLine(meta: SkillMeta): string {
 export function buildAskAgentPrompt(
   profile: WorkspaceProfile,
   catalogMetas: SkillMeta[],
-  optedInSkillNames: string[]
+  optedInSkillNames: string[],
+  discoverySections: DiscoveryPromptSection[] = []
 ): string {
   const opted = new Set(optedInSkillNames.map((n) => n.toLowerCase()));
   const candidates = catalogMetas.filter((m) => !opted.has(m.name.toLowerCase()));
@@ -114,6 +116,19 @@ export function buildAskAgentPrompt(
 ${candidateLines.join("\n")}${candidateOverflow}`
     : "Catalog candidates: (none — try syncing first via `Skill Sync: Manage AI Skills`).";
 
+  const discoverySection =
+    discoverySections.length > 0
+      ? `\n\nDiscovery directories (public repos to mine for skills — for each one, **enumerate every skill in the repo** before recommending):\n${discoverySections
+          .map((s) => `- **${s.source.label}** — ${s.repoUrl}\n  ${s.structureHint}`)
+          .join("\n")}
+
+For every discovery directory above, before you respond:
+1. List **every** skill that exists in the repo (use available tools — GitHub API / file listing / web fetch — to enumerate the directory; do not rely on memory of a single popular skill).
+2. Evaluate **each** discovered skill against the workspace fingerprint (languages, dependencies, paths, AGENTS.md).
+3. Include **all** that are a plausible fit (Strong, Other, or General-purpose), not just the single most obvious one.
+4. For each discovery skill, note the GitHub coordinates inline as \`installSource.value = "owner/repo"\` and \`skillPath = "..."\` so the user can install it.`
+      : "";
+
   return `Use the Agent Skill Sync **skill-recommender** subagent (\`agents/skill-recommender.md\`) to pick the best Cursor agent skills for this workspace. Recommend only — do not edit files.
 
 Workspace fingerprint
@@ -123,9 +138,9 @@ Workspace fingerprint
 - Notable paths: ${pathsLine}
 - AGENTS.md present: ${profile.agentsMdText ? "yes" : "no"}
 
-${installedSection}${candidateSection}
+${installedSection}${candidateSection}${discoverySection}
 
-Please respond in three sections — **Strong matches**, **Other suggestions**, **General-purpose** — using one bullet per skill in the form \`**skill-name** — one sentence why\`. Only recommend names from the catalog list above. End with one line telling me to run **Skill Sync: Manage AI Skills** (\`skillSync.manageSkills\`) to enable the picks.`;
+Please respond in three sections — **Strong matches**, **Other suggestions**, **General-purpose** — using one bullet per skill in the form \`**skill-name** — one sentence why\`. Combine catalog candidates with **all relevant discovery skills you enumerated above** — do not stop at one or two from each discovery repo if more fit the fingerprint. End with one line telling me to run **Skill Sync: Manage AI Skills** (\`skillSync.manageSkills\`) to enable the picks.`;
 }
 
 export async function resolveChatPromptCommand(): Promise<string | undefined> {
