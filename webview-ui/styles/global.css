@@ -435,6 +435,28 @@ code {
   background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.18));
 }
 
+.skill-source-badge--official-skills {
+  color: var(--vscode-foreground);
+  background: var(--vscode-textCodeBlock-background, rgba(100, 120, 200, 0.2));
+}
+
+.skill-source-badge--open-skills {
+  color: var(--vscode-foreground);
+  background: var(--vscode-textCodeBlock-background, rgba(100, 180, 140, 0.2));
+}
+
+.skill-source-badge--muted {
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.skill-row--discovery-summary {
+  opacity: 0.98;
+}
+
 .browse-source-tabs {
   display: flex;
   gap: 4px;

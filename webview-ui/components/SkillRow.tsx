@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { SkillInfo } from "../types/messages";
+import { SkillInfo, SkillSourceInfo } from "../types/messages";
 import { IconCursorRule, IconSkillPkg } from "./icons";
 
 interface SkillRowProps {
@@ -25,9 +25,45 @@ export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.J
 
   const typeLabel = isSkillPkg ? "Skill package" : "Cursor rule";
   const sourceLabel = skill.source?.label;
+  function sourceKindLabel(type: SkillSourceInfo["type"]): string {
+    switch (type) {
+      case "github-repo":
+        return "GitHub";
+      case "custom-registry":
+        return "Registry";
+      case "official-skills":
+        return "Official directory";
+      case "open-skills":
+        return "Open directory";
+      default:
+        return "Registry";
+    }
+  }
+
   const sourceTitle = skill.source
-    ? `${skill.source.type === "github-repo" ? "GitHub" : "Registry"} source: ${skill.source.label}`
+    ? `${sourceKindLabel(skill.source.type)} source: ${skill.source.label}`
     : undefined;
+
+  if (skill.isDiscoverySummary) {
+    return (
+      <div className="skill-row skill-row--discovery-summary">
+        <div className="skill-info">
+          <div className="skill-title-row">
+            <span className="skill-type-badge" aria-label="Discovery directory" title="Discovery directory">
+              <IconSkillPkg />
+            </span>
+            <span className="skill-title">{skill.name}</span>
+            <span className="skill-source-badge skill-source-badge--muted" title="Not installable from this row">
+              discovery directory
+            </span>
+          </div>
+          {skill.description ? (
+            <div className="skill-description">{skill.description}</div>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={`skill-row${isOptedIn ? " skill-row--active" : ""}`}>

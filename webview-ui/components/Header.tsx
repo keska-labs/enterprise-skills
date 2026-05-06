@@ -17,8 +17,26 @@ interface HeaderProps {
   onSyncNow: () => void;
 }
 
+function sourceValueHint(source: SkillSourceState): string {
+  if (source.type === "official-skills" || source.type === "open-skills") {
+    return "public directory";
+  }
+  return source.value;
+}
+
 function sourceTypeLabel(type: SkillSourceState["type"]): string {
-  return type === "github-repo" ? "GitHub" : "registry";
+  switch (type) {
+    case "github-repo":
+      return "GitHub";
+    case "custom-registry":
+      return "registry";
+    case "official-skills":
+      return "officialskills.sh";
+    case "open-skills":
+      return "skills.sh";
+    default:
+      return "registry";
+  }
 }
 
 export function Header({
@@ -47,7 +65,7 @@ export function Header({
             <ul className="source-list" aria-label="Configured skill sources">
               {sources.map((source) => (
                 <li key={source.sourceKey} className="source-chip">
-                  <span className="source-chip-name" title={`${source.label} • ${source.value}`}>
+                  <span className="source-chip-name" title={`${source.label} • ${sourceValueHint(source)}`}>
                     {source.label}
                   </span>
                   <span className="source-chip-kind" aria-label={`${sourceTypeLabel(source.type)} source`}>

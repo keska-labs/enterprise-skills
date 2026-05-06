@@ -4,7 +4,11 @@
  */
 export type SkillType = "cursor-rule" | "skill";
 
-export type SourceType = "github-repo" | "custom-registry";
+export type SourceType =
+  | "github-repo"
+  | "custom-registry"
+  | "official-skills"
+  | "open-skills";
 
 export interface SkillSourceInfo {
   label: string;
@@ -27,6 +31,10 @@ export interface SkillInfo {
   /** Number of files in the package (only meaningful for `skill` type). */
   fileCount?: number;
   source?: SkillSourceInfo;
+  /** Aggregator entries — opt-in adds the backing GitHub repo. */
+  isDiscoveryOnly?: boolean;
+  /** Non-installable directory summary row (officialskills.sh / skills.sh). */
+  isDiscoverySummary?: boolean;
 }
 
 export type RecommendationMatchKind = "strong" | "weak" | "general";
