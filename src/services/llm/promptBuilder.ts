@@ -1,5 +1,6 @@
 import { SkillMeta } from "../../types";
 import { WorkspaceProfile } from "../WorkspaceAnalyzer";
+import { DiscoveryPromptSection } from "../discoveryPrompt";
 
 const MAX_AGENTS_SNIPPET = 2048;
 const MAX_SKILL_LINES = 80;
@@ -19,7 +20,8 @@ function truncate(s: string, max: number): string {
 export function buildRecommendationPrompt(
   profile: WorkspaceProfile,
   catalogMetas: SkillMeta[],
-  optedInSkillNames: string[]
+  optedInSkillNames: string[],
+  discoverySections: DiscoveryPromptSection[] = []
 ): string {
   const opted = new Set(optedInSkillNames.map((n) => n.toLowerCase()));
   const candidates = catalogMetas.filter((m) => !opted.has(m.name.toLowerCase()));
@@ -51,6 +53,30 @@ export function buildRecommendationPrompt(
     return parts.join(" | ");
   });
 
+  const discoveryKeysHint =
+    discoverySections.length > 0
+      ? discoverySections.map((s) => `- ${s.source.sourceKey} (${s.source.label})`).join("\n")
+      : "";
+
+  const discoveryBlocks =
+    discoverySections.length > 0
+      ? discoverySections
+          .map(
+            (s) =>
+              `- ${s.source.label} — ${s.repoUrl}
+  sourceKey: ${s.source.sourceKey}
+  layout: ${s.structureHint}`
+          )
+          .join("\n")
+      : "";
+
+  const catalogSection =
+    skillLines.length > 0
+      ? `Prefetched catalog candidates (${candidates.length} total; ${Math.min(candidates.length, MAX_SKILL_LINES)} shown — recommend using these **exact** names when they fit).
+Each line is: name | source-label | category | description | triggers JSON
+${skillLines.join("\n")}`
+      : `Prefetched catalog candidates: **none** (no GitHub/registry skills cached yet — you may still recommend from the discovery directories below using your own knowledge of those public repos).`;
+
   return `You are ranking Cursor agent skills for a software workspace. Each skill may be a "skill" package (directory with SKILL.md) or a "cursor-rule" (single rule file).
 
 Workspace summary:
@@ -63,17 +89,46 @@ ${paths}
 AGENTS.md excerpt (lowercase, may be empty):
 ${agents}
 
-Catalog candidates (${candidates.length} total; ${Math.min(candidates.length, MAX_SKILL_LINES)} shown — only recommend names from this list).
-Each line is: name | source-label | category | description | triggers JSON
-${skillLines.join("\n")}
+${catalogSection}
 
+${
+  discoverySections.length > 0
+    ? `Discovery directories (public GitHub repos — **no precomputed catalog**; you have no tools, so use your own training knowledge of these well-known repos):
+${discoveryBlocks}
+
+For each discovery directory:
+1. **Enumerate every skill you know** is published in that repo (don't stop at the most obvious one — list each \`SKILL.md\` package / rule you can recall).
+2. Evaluate **each** against the workspace fingerprint above (languages, dependencies, paths, AGENTS.md keywords).
+3. Include **every plausibly-fitting** skill in your output, not just the single best match.
+4. Skip skills you are not reasonably confident exist in the named repo — do not invent names.
+
+When you recommend a skill from a discovery directory (i.e. it is **not** in the prefetched catalog list above), each item MUST include JSON fields:
+- "installSource": { "value": "owner/repo", "skillPath": "optional path inside the repo, e.g. skills/foo" }
+- "discoverySourceKey": one of:
+${discoveryKeysHint}
+If only one discovery directory is configured, you may omit "discoverySourceKey" and it will be inferred.
+`
+    : ""
+}
 Task: Pick up to 20 skills that best help an AI coding agent working in this repo. Prefer strong alignment with languages, dependencies, file patterns, and AGENTS.md keywords. Use "general" matchKind sparingly for broadly useful skills.
 
 Respond with ONLY valid JSON (no markdown fences) in this exact shape:
-{"recommendations":[{"name":"<exact skill name from catalog>","score":0,"reason":"<one short sentence>","matchKind":"strong"}]}
-- score: integer 0-100
-- matchKind: one of "strong", "weak", "general"
-- Omit opted-in skills (already installed list provided implicitly by exclusion — do not recommend duplicates.)
-- Only use skill names that appear in the catalog lines above.`;
+{"recommendations":[{"name":"<skill name>","score":0,"reason":"<one short sentence>","matchKind":"strong"}]}
+${
+  discoverySections.length > 0
+    ? `For skills taken from a discovery directory, each item MUST also include:
+,"installSource":{"value":"owner/repo","skillPath":"optional/subdir"},"discoverySourceKey":"<one of the keys above>"
 
+`
+    : ""
+}Rules:
+- score: integer 0-100
+- matchKind: one of "strong", "weak", "general"${
+    discoverySections.length > 0
+      ? `
+- For catalog skills (listed in prefetched lines), omit installSource and discoverySourceKey; use the exact "name" from that list.
+- installSource.value must look like a GitHub "owner/repo".`
+      : ""
+  }
+- Omit opted-in skills (already installed — excluded above).`;
 }

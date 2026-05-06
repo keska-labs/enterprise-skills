@@ -1,13 +1,15 @@
 import * as vscode from "vscode";
 import { Recommendation } from "../../webview-ui/types/messages";
 import { RecommenderProviderId } from "./llm/types";
+import { SkillMeta } from "../types";
 
-const CACHE_ROOT_KEY = "agentSkillSync.llmRecommendationEntries.v2";
+const CACHE_ROOT_KEY = "agentSkillSync.llmRecommendationEntries.v4";
 
 export interface LlmRecommendationCacheEntry {
   recommendations: Recommendation[];
   source: "llm" | "heuristic";
   providerId?: RecommenderProviderId;
+  discoveryMetasByCompositeKey?: Record<string, SkillMeta>;
   expiresAt: number;
 }
 
@@ -25,13 +27,19 @@ export class LlmRecommendationCache {
     return {
       recommendations: e.recommendations,
       source: e.source,
-      providerId: e.providerId
+      providerId: e.providerId,
+      discoveryMetasByCompositeKey: e.discoveryMetasByCompositeKey
     };
   }
 
   public set(
     hash: string,
-    payload: { recommendations: Recommendation[]; source: "llm" | "heuristic"; providerId?: RecommenderProviderId },
+    payload: {
+      recommendations: Recommendation[];
+      source: "llm" | "heuristic";
+      providerId?: RecommenderProviderId;
+      discoveryMetasByCompositeKey?: Record<string, SkillMeta>;
+    },
     ttlMs: number
   ): void {
     const map = this.readMap();

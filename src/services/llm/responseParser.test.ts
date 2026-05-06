@@ -40,4 +40,38 @@ describe("parseLlmRankResponse", () => {
     });
     expect(parseLlmRankResponse(raw, names)?.recommendations[0].score).toBe(100);
   });
+
+  it("accepts discovery rows with installSource even when name is not in catalog", () => {
+    const raw = JSON.stringify({
+      recommendations: [
+        {
+          name: "custom-from-readme",
+          score: 70,
+          reason: "Listed in README",
+          matchKind: "strong",
+          installSource: { value: "anthropics/skills", skillPath: "skills/docx" },
+          discoverySourceKey: "official-skills:directory"
+        }
+      ]
+    });
+    const out = parseLlmRankResponse(raw, new Set());
+    expect(out?.recommendations).toHaveLength(1);
+    expect(out?.recommendations[0].installSource?.value).toBe("anthropics/skills");
+    expect(out?.recommendations[0].discoverySourceKey).toBe("official-skills:directory");
+  });
+
+  it("rejects invalid installSource owner/repo", () => {
+    const raw = JSON.stringify({
+      recommendations: [
+        {
+          name: "x",
+          score: 70,
+          reason: "bad",
+          matchKind: "strong",
+          installSource: { value: "not-a-repo-ref" }
+        }
+      ]
+    });
+    expect(parseLlmRankResponse(raw, new Set())).toBeUndefined();
+  });
 });
