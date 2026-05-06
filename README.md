@@ -127,7 +127,7 @@ Focuses the Skill Manager sidebar. Change it under **Keyboard Shortcuts** — se
 
 | Setting | Purpose |
 | --- | --- |
-| `skillSync.sources` | Ordered list of skill sources. Each entry is `{ "type": "github-repo" \| "custom-registry", "value": "owner/repo or https://registry", "label": "optional-prefix" }`. Catalogs from every source are fetched in parallel and merged. |
+| `skillSync.sources` | Ordered list of skill sources. Each entry is `{ "type": "github-repo" \| "custom-registry" \| "official-skills" \| "open-skills", "value": "owner/repo, registry URL, or directory", "label": "optional-prefix" }`. Catalogs from every source are fetched in parallel and merged. The **`official-skills`** and **`open-skills`** entries use `value: "directory"` (singletons); they are discovery-only aggregators — enabling a listed skill adds its GitHub repo as a normal `github-repo` source. |
 | `skillSync.categories` | Category names for registry-mode sources |
 | `skillSync.optedInSkills` | Composite identifiers (`<source-label>/<skill-name>`) currently enabled for sync |
 | `skillSync.sourceMode` *(deprecated)* | Legacy single-source mode; auto-migrated into `skillSync.sources` on first activation |
@@ -150,7 +150,9 @@ Skills are written under namespaced folders so the same skill name can co-exist 
       ...
 ```
 
-The `<source-label>` is auto-derived from each source (the GitHub repo segment, or the registry hostname) and can be overridden via the optional `label` field. On first activation after upgrading from a single-source workspace, the extension migrates legacy flat files into the new layout automatically.
+The `<source-label>` is auto-derived from each source (the GitHub `owner/repo`, the registry hostname, or a fixed label for the public directories) and can be overridden via the optional `label` field. On first activation after upgrading from a single-source workspace, the extension migrates legacy flat files into the new layout automatically.
+
+**Official / Open directories:** Use **Skill Sync: Add Skill Source** to add [officialskills.sh](https://officialskills.sh) or [skills.sh](https://skills.sh). They **do not prefetch** into the merged catalog (that stays GitHub + custom registry only). Instead, the extension embeds a **short descriptor** (repo URL + skill-layout hint) into the **LLM recommendation prompt** — no README markdown is sent — and lets the model use its own knowledge of those well-known public repos to recommend concrete skills. The model returns `installSource` (`owner/repo`, optional `skillPath`) plus `discoverySourceKey` when multiple directories are configured. **Heuristic-only** workspaces (LLM recommendations disabled and no Copilot-style `vscode.lm` provider) will not surface directory picks. The Catalog tab shows one informational row per directory; enable picks from the **Recommended** tab after running recommendations.
 
 ---
 
