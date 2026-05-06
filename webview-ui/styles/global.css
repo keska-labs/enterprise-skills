@@ -296,6 +296,152 @@ code {
   gap: 4px;
 }
 
+.source-list-block {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.source-name--empty {
+  font-size: 13px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.source-list {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px 2px 6px;
+  border-radius: 4px;
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.12));
+  font-size: 12px;
+  line-height: 1.2;
+  max-width: 100%;
+}
+
+.source-chip-name {
+  font-weight: 600;
+  color: var(--vscode-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 140px;
+}
+
+.source-chip-kind {
+  font-size: 10px;
+  text-transform: lowercase;
+  color: var(--vscode-descriptionForeground);
+}
+
+.source-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  font-size: 14px;
+  line-height: 1;
+  opacity: 0.7;
+  cursor: pointer;
+}
+
+.source-chip-remove:hover {
+  opacity: 1;
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.2));
+}
+
+.source-chip-remove:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.source-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px dashed var(--vscode-input-border, rgba(128, 128, 128, 0.4));
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.source-add-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.12));
+}
+
+.source-add-btn:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.source-add-btn svg {
+  display: block;
+  width: 12px;
+  height: 12px;
+}
+
+.source-add-label {
+  font-weight: 500;
+}
+
+.skill-source-badge {
+  /* `inline-block` (not `inline-flex`) so `text-overflow: ellipsis` actually
+     truncates instead of just clipping at the rounded corner. */
+  display: inline-block;
+  vertical-align: middle;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+  white-space: nowrap;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-source-badge--github-repo {
+  color: var(--vscode-foreground);
+}
+
+.skill-source-badge--custom-registry {
+  color: var(--vscode-foreground);
+  background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.18));
+}
+
+.browse-source-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
 .source-name {
   font-size: 13px;
   font-weight: 600;

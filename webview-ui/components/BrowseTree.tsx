@@ -8,10 +8,12 @@ interface BrowseTreeProps {
   collapsedPaths: Set<string>;
   expandingPath: string | null;
   skillsRootPath: string;
+  /** Label of the source this browse tree belongs to. Used to build composite keys. */
+  sourceLabel: string;
   selectedSkills: Set<string>;
   insideSkillPackage?: boolean;
   onExpandDir: (fullPath: string) => void;
-  onToggleSkill: (skillName: string, optIn: boolean) => void;
+  onToggleSkill: (compositeKey: string, optIn: boolean) => void;
 }
 
 function deriveSkillName(root: string, filePath: string): string {
@@ -21,6 +23,10 @@ function deriveSkillName(root: string, filePath: string): string {
     ? normalizedFile.slice(`${normalizedRoot}/`.length)
     : normalizedFile;
   return relative.replace(/\.(md|mdc|yaml|yml)$/i, "").split("/").filter(Boolean).join("-");
+}
+
+function compositeKey(label: string, name: string): string {
+  return `${label}/${name}`;
 }
 
 const RULE_FILE_PATTERN = /\.(md|mdc|yaml|yml)$/i;
@@ -58,8 +64,10 @@ export function BrowseTree(props: BrowseTreeProps): React.JSX.Element {
                       <input
                         type="checkbox"
                         aria-label={`Select ${entry.name}`}
-                        checked={props.selectedSkills.has(skillName)}
-                        onChange={(e) => props.onToggleSkill(skillName, e.currentTarget.checked)}
+                        checked={props.selectedSkills.has(compositeKey(props.sourceLabel, skillName))}
+                        onChange={(e) =>
+                          props.onToggleSkill(compositeKey(props.sourceLabel, skillName), e.currentTarget.checked)
+                        }
                       />
                     ) : null}
                     <button
@@ -88,6 +96,7 @@ export function BrowseTree(props: BrowseTreeProps): React.JSX.Element {
                   collapsedPaths={props.collapsedPaths}
                   expandingPath={props.expandingPath}
                   skillsRootPath={props.skillsRootPath}
+                  sourceLabel={props.sourceLabel}
                   selectedSkills={props.selectedSkills}
                   insideSkillPackage={childInsideSkillPackage}
                   onExpandDir={props.onExpandDir}
@@ -101,10 +110,12 @@ export function BrowseTree(props: BrowseTreeProps): React.JSX.Element {
                   <input
                     type="checkbox"
                     aria-label={`Select ${entry.name}`}
-                    checked={props.selectedSkills.has(deriveSkillName(props.skillsRootPath, entry.path))}
+                    checked={props.selectedSkills.has(
+                      compositeKey(props.sourceLabel, deriveSkillName(props.skillsRootPath, entry.path))
+                    )}
                     onChange={(e) => {
                       const skillName = deriveSkillName(props.skillsRootPath, entry.path);
-                      props.onToggleSkill(skillName, e.currentTarget.checked);
+                      props.onToggleSkill(compositeKey(props.sourceLabel, skillName), e.currentTarget.checked);
                     }}
                   />
                 ) : null}

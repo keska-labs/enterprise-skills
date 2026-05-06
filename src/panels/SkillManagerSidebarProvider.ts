@@ -3,12 +3,13 @@ import { AuthService } from "../services/AuthService";
 import { ConfigService } from "../services/ConfigService";
 import { RepoService } from "../services/RepoService";
 import { SyncEngine } from "../services/SyncEngine";
-import { SkillCatalogStore, currentSourceKey } from "../services/SkillCatalogStore";
+import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { CatalogService } from "../services/CatalogService";
+import { MultiSourceCatalogService } from "../services/MultiSourceCatalogService";
 import { WorkspaceAnalyzer } from "../services/WorkspaceAnalyzer";
 import { Logger } from "../utils/logger";
-import { configureSource } from "../commands/registerCommands";
-import { SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
+import { configureSource, removeSourceCommand } from "../commands/registerCommands";
+import { SkillInfo, SkillManagerState, WebviewMessage } from "../../webview-ui/types/messages";
 import { buildAskAgentPromptFromContext, buildRecommendationsPayload } from "./skillManagerRecommendations";
 import { LlmSkillRecommender } from "../services/LlmSkillRecommender";
 import { buildSkillManagerState, disconnectSource, fallbackSkillManagerState } from "./skillManagerState";
@@ -20,6 +21,7 @@ import {
 import { ServiceError } from "../services/ServiceError";
 import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
 import { SkillMeta } from "../types";
+import { compositeSkillKey } from "../utils/sources";
 
 export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "skillSync.sidebarManager";
@@ -36,6 +38,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
     private readonly logger: Logger,
     private readonly catalogStore: SkillCatalogStore,
     private readonly catalogService: CatalogService,
+    private readonly multiSourceService: MultiSourceCatalogService,
     private readonly workspaceAnalyzer: WorkspaceAnalyzer,
     private readonly llmSkillRecommender: LlmSkillRecommender
   ) {
@@ -87,12 +90,16 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       case "getState":
         await this.postState();
         break;
-      case "connectRepo":
+      case "addSource":
         await configureSource(this.authService, this.configService, this.repoService, this.syncEngine, this.logger);
         await this.postState();
         break;
-      case "disconnectRepo":
-        await this.disconnectCurrentSource();
+      case "removeSource":
+        await removeSourceCommand(this.configService, this.catalogStore, this.logger, message.sourceKey);
+        await this.postState();
+        break;
+      case "disconnectAll":
+        await this.disconnectAll();
         await this.postState();
         break;
       case "syncNow": {
@@ -104,12 +111,12 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       case "toggleSkill": {
         const current = new Set(this.configService.getOptedInSkills());
         if (message.optIn) {
-          current.add(message.skillName);
+          current.add(message.compositeKey);
         } else {
-          current.delete(message.skillName);
+          current.delete(message.compositeKey);
         }
         await this.configService.setOptedInSkills([...current]);
-        const result = await this.syncEngine.syncSingle(message.skillName, message.optIn);
+        const result = await this.syncEngine.syncSingle(message.compositeKey, message.optIn);
         this.view?.webview.postMessage({ type: "syncComplete", payload: result });
         await this.postState();
         break;
@@ -120,6 +127,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
           this.catalogService,
           this.repoService,
           this.catalogStore,
+          message.sourceKey,
           (msg) => this.view?.webview.postMessage(msg)
         );
         await this.postState();
@@ -131,6 +139,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
           this.catalogService,
           this.repoService,
           this.catalogStore,
+          message.sourceKey,
           message.path,
           (msg) => this.view?.webview.postMessage(msg)
         );
@@ -138,10 +147,11 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         break;
       }
       case "getCatalog": {
-        const snapshot = await this.catalogService.getCatalog(currentSourceKey(this.configService));
+        const sources = this.configService.getResolvedSources();
+        const merged = await this.multiSourceService.getMergedCatalog(sources);
         this.view?.webview.postMessage({
           type: "catalogResult",
-          skills: snapshot.metas.map(metaToSkillInfo)
+          skills: merged.metas.map(metaToSkillInfo)
         });
         break;
       }
@@ -214,8 +224,12 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       this.view?.webview.postMessage({
         type: "setState",
         payload: fallbackSkillManagerState({
-          sourceRepository: this.configService.getSourceRepository(),
-          sourceMode: this.configService.getSourceMode(),
+          sources: this.configService.getResolvedSources().map((s) => ({
+            type: s.type,
+            value: s.value,
+            label: s.label,
+            sourceKey: s.sourceKey
+          })),
           isConnected: false,
           connectionHealth,
           syncStatus: "failed",
@@ -225,10 +239,13 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async disconnectCurrentSource(): Promise<void> {
-    const disconnected = await disconnectSource(this.configService, this.catalogStore);
-    if (disconnected) {
-      vscode.window.showInformationMessage("Skill source disconnected.");
+  private async disconnectAll(): Promise<void> {
+    const sources = this.configService.getResolvedSources();
+    for (const source of sources) {
+      await disconnectSource(this.configService, this.catalogStore, source.sourceKey);
+    }
+    if (sources.length > 0) {
+      vscode.window.showInformationMessage("All skill sources disconnected.");
     }
   }
 
@@ -238,7 +255,8 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
       syncEngine: this.syncEngine,
       logger: this.logger,
       catalogStore: this.catalogStore,
-      catalogService: this.catalogService
+      catalogService: this.catalogService,
+      multiSourceService: this.multiSourceService
     });
   }
 
@@ -257,13 +275,18 @@ function mapServiceReasonToHealth(reason: string): SkillManagerState["connection
   return "unknown";
 }
 
-function metaToSkillInfo(meta: SkillMeta) {
+function metaToSkillInfo(meta: SkillMeta): SkillInfo {
+  const label = meta.source?.label ?? "";
   return {
+    compositeKey: compositeSkillKey(label, meta.name),
     name: meta.name,
     description: meta.description ?? "",
     version: meta.version ?? meta.shaOrVersion.slice(0, 7),
     category: meta.category ?? "Uncategorized",
     skillType: meta.skillType,
-    fileCount: meta.skillFiles?.length
+    fileCount: meta.skillFiles?.length,
+    source: meta.source
+      ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
+      : undefined
   };
 }

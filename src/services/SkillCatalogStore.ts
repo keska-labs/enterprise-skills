@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { SkillMeta } from "../types";
 import { ConfigService } from "./ConfigService";
+import { buildSourceKey as buildSourceKeyFromTypes } from "../utils/sources";
 
 const STORAGE_VERSION = 4; // bumped: SkillMeta.triggers + browse merge preserves indexed manifests
 
@@ -42,19 +43,22 @@ function mergeSkillMetaEntry(prev: SkillMeta, incoming: SkillMeta): SkillMeta {
   return incoming;
 }
 
+/**
+ * Legacy single-source key builder. Multi-source callers should use
+ * `buildSourceKey` from `../utils/sources` and pass the typed source value.
+ * Kept here as a thin shim so existing import sites continue to compile.
+ */
 export function buildSourceKey(sourceMode: "github-repo" | "custom-registry", sourceRepository: string, registryUrl: string): string {
   if (sourceMode === "github-repo") {
-    return `github:${sourceRepository.trim()}`;
+    return buildSourceKeyFromTypes("github-repo", sourceRepository);
   }
-  return `registry:${registryUrl.trim()}`;
+  return buildSourceKeyFromTypes("custom-registry", registryUrl);
 }
 
+/** Legacy: returns the first configured source's key, or "" when none. */
 export function currentSourceKey(configService: ConfigService): string {
-  return buildSourceKey(
-    configService.getSourceMode(),
-    configService.getSourceRepository(),
-    configService.getRegistryUrl()
-  );
+  const sources = configService.getResolvedSources();
+  return sources[0]?.sourceKey ?? "";
 }
 
 export class SkillCatalogStore {

@@ -22,8 +22,7 @@ function skillManagerPayload(overrides: Partial<SkillManagerState>): SkillManage
     enabledCategories: [],
     optedInSkills: [],
     lastSyncTime: null,
-    sourceRepository: "",
-    sourceMode: "github-repo",
+    sources: [],
     syncStatus: "idle",
     lastError: null,
     syncMessage: null,
@@ -38,6 +37,7 @@ function skillManagerPayload(overrides: Partial<SkillManagerState>): SkillManage
 
 export function makeSkillInfo(overrides: Partial<import("./types/messages").SkillInfo> = {}): import("./types/messages").SkillInfo {
   return {
+    compositeKey: "test/test-skill",
     name: "test-skill",
     description: "",
     version: "abc1234",
@@ -92,8 +92,7 @@ describe("App", () => {
             enabledCategories: [],
             optedInSkills: [],
             lastSyncTime: null,
-            sourceRepository: "org/repo",
-            sourceMode: "github-repo",
+            sources: [{ type: "github-repo", value: "org/repo", label: "repo", sourceKey: "github:org/repo" }],
             syncStatus: "idle",
             lastError: null,
             syncMessage: null
@@ -117,7 +116,7 @@ describe("App", () => {
         }
       }));
     });
-    expect(await view.findByText("org/repo")).toBeInTheDocument();
+    expect(await view.findByText("repo")).toBeInTheDocument();
     expect(view.queryByText(/Skills synced successfully/)).not.toBeInTheDocument();
   });
 });

@@ -35,6 +35,7 @@ export function buildRecommendationPrompt(
     const trig = m.triggers;
     const parts = [
       m.name,
+      m.source?.label ?? "",
       m.category ?? "",
       truncate(m.description ?? "", 200),
       trig
@@ -62,7 +63,8 @@ ${paths}
 AGENTS.md excerpt (lowercase, may be empty):
 ${agents}
 
-Catalog candidates (${candidates.length} total; ${Math.min(candidates.length, MAX_SKILL_LINES)} shown — only recommend names from this list):
+Catalog candidates (${candidates.length} total; ${Math.min(candidates.length, MAX_SKILL_LINES)} shown — only recommend names from this list).
+Each line is: name | source-label | category | description | triggers JSON
 ${skillLines.join("\n")}
 
 Task: Pick up to 20 skills that best help an AI coding agent working in this repo. Prefer strong alignment with languages, dependencies, file patterns, and AGENTS.md keywords. Use "general" matchKind sparingly for broadly useful skills.

@@ -1,5 +1,5 @@
 import * as vscode from "vscode";
-import { SkillMeta } from "../types";
+import { ResolvedSource, SkillMeta } from "../types";
 import { Recommendation } from "../../webview-ui/types/messages";
 import { WorkspaceProfile } from "./WorkspaceAnalyzer";
 import { ConfigService } from "./ConfigService";
@@ -17,6 +17,7 @@ import { recommendationCacheCompositeKey, workspaceProfileFingerprint } from "./
 import { LlmRecommendationCache } from "./LlmRecommendationCache";
 import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
 import { RecommenderProviderId } from "./llm/types";
+import { combinedSourcesKey, compositeSkillKey } from "../utils/sources";
 
 export interface RecommendationsLlmResult {
   recommendations: Recommendation[];
@@ -36,11 +37,16 @@ export class LlmSkillRecommender {
     profile: WorkspaceProfile;
     metas: SkillMeta[];
     optedInSkills: string[];
-    sourceKey: string;
+    /** Either a single legacy source key (back-compat) or the resolved sources array. */
+    sources?: ResolvedSource[];
+    sourceKey?: string;
     forceRefresh: boolean;
     token: vscode.CancellationToken;
   }): Promise<RecommendationsLlmResult> {
-    const { profile, metas, optedInSkills, sourceKey, forceRefresh, token } = params;
+    const { profile, metas, optedInSkills, forceRefresh, token } = params;
+    const sourcesKey = params.sources && params.sources.length > 0
+      ? combinedSourcesKey(params.sources)
+      : (params.sourceKey ?? "");
 
     const heuristicList = recommend(profile, metas, optedInSkills);
 
@@ -58,7 +64,7 @@ export class LlmSkillRecommender {
 
     const cacheKey = recommendationCacheCompositeKey({
       workspaceUri,
-      sourceKey,
+      sourcesKey,
       profileFp,
       catalogFp,
       modelFamily,
@@ -115,11 +121,12 @@ export class LlmSkillRecommender {
         const opted = new Set(optedInSkills.map((n) => n.toLowerCase()));
         const recommendations: Recommendation[] = [];
         for (const r of parsed.recommendations) {
-          if (opted.has(r.name.toLowerCase())) {
-            continue;
-          }
           const meta = metaByName.get(r.name);
           if (!meta) {
+            continue;
+          }
+          const composite = meta.source ? compositeSkillKey(meta.source.label, meta.name) : meta.name;
+          if (opted.has(r.name.toLowerCase()) || opted.has(composite.toLowerCase())) {
             continue;
           }
           recommendations.push({

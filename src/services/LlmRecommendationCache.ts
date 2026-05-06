@@ -2,7 +2,7 @@ import * as vscode from "vscode";
 import { Recommendation } from "../../webview-ui/types/messages";
 import { RecommenderProviderId } from "./llm/types";
 
-const CACHE_ROOT_KEY = "agentSkillSync.llmRecommendationEntries.v1";
+const CACHE_ROOT_KEY = "agentSkillSync.llmRecommendationEntries.v2";
 
 export interface LlmRecommendationCacheEntry {
   recommendations: Recommendation[];

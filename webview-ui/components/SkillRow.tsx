@@ -5,11 +5,11 @@ import { IconCursorRule, IconSkillPkg } from "./icons";
 interface SkillRowProps {
   skill: SkillInfo;
   isOptedIn: boolean;
-  onToggle: (skillName: string, optIn: boolean) => void;
+  onToggle: (compositeKey: string, optIn: boolean) => void;
 }
 
 export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.JSX.Element {
-  const id = `skill-toggle-${skill.name.replace(/[^\w-]+/g, "-")}`;
+  const id = `skill-toggle-${skill.compositeKey.replace(/[^\w-]+/g, "-")}`;
   const [tipOpen, setTipOpen] = useState(false);
 
   const isSkillPkg = skill.skillType === "skill";
@@ -24,6 +24,10 @@ export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.J
   const tipContent = tipParts.join(" · ");
 
   const typeLabel = isSkillPkg ? "Skill package" : "Cursor rule";
+  const sourceLabel = skill.source?.label;
+  const sourceTitle = skill.source
+    ? `${skill.source.type === "github-repo" ? "GitHub" : "Registry"} source: ${skill.source.label}`
+    : undefined;
 
   return (
     <div className={`skill-row${isOptedIn ? " skill-row--active" : ""}`}>
@@ -33,6 +37,14 @@ export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.J
             {isSkillPkg ? <IconSkillPkg /> : <IconCursorRule />}
           </span>
           <span className="skill-title">{skill.name}</span>
+          {sourceLabel ? (
+            <span
+              className={`skill-source-badge skill-source-badge--${skill.source?.type ?? "unknown"}`}
+              title={sourceTitle}
+            >
+              {sourceLabel}
+            </span>
+          ) : null}
           {hasInfo && (
             <span className="skill-info-anchor">
               <button
@@ -64,7 +76,7 @@ export function SkillRow({ skill, isOptedIn, onToggle }: SkillRowProps): React.J
           type="checkbox"
           checked={isOptedIn}
           aria-label={`${isOptedIn ? "Disable" : "Enable"} ${skill.name}`}
-          onChange={(e) => onToggle(skill.name, e.currentTarget.checked)}
+          onChange={(e) => onToggle(skill.compositeKey, e.currentTarget.checked)}
         />
       </div>
     </div>

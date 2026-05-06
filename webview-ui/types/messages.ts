@@ -1,10 +1,24 @@
 /**
- * `cursor-rule` — a single `.mdc` file synced to `.cursor/rules/`.
- * `skill`       — a directory package synced to `.cursor/skills/`.
+ * `cursor-rule` — a single `.mdc` file synced to `.cursor/rules/<label>/`.
+ * `skill`       — a directory package synced to `.cursor/skills/<label>/`.
  */
 export type SkillType = "cursor-rule" | "skill";
 
+export type SourceType = "github-repo" | "custom-registry";
+
+export interface SkillSourceInfo {
+  label: string;
+  type: SourceType;
+  sourceKey: string;
+}
+
+export interface SkillSourceState extends SkillSourceInfo {
+  value: string;
+}
+
 export interface SkillInfo {
+  /** Stable identifier `<sourceLabel>/<name>` used for opted-in tracking and React keys. */
+  compositeKey: string;
   name: string;
   description: string;
   version: string;
@@ -12,6 +26,7 @@ export interface SkillInfo {
   skillType: SkillType;
   /** Number of files in the package (only meaningful for `skill` type). */
   fileCount?: number;
+  source?: SkillSourceInfo;
 }
 
 export type RecommendationMatchKind = "strong" | "weak" | "general";
@@ -39,10 +54,10 @@ export interface BrowseEntry {
 export type CatalogStatus = "idle" | "loading" | "ready" | "error";
 
 export interface SkillManagerState {
-  sourceRepository: string;
-  sourceMode: "github-repo" | "custom-registry";
+  sources: SkillSourceState[];
   categories: CategoryData[];
   enabledCategories: CategoryData[];
+  /** Composite keys (`<sourceLabel>/<name>`). */
   optedInSkills: string[];
   lastSyncTime: string | null;
   isConnected: boolean;
@@ -61,14 +76,15 @@ export type SkillManagerMainTab = "manage" | "browse" | "recommended";
 
 export type WebviewMessage =
   | { type: "ready" }
-  | { type: "connectRepo" }
-  | { type: "disconnectRepo" }
+  | { type: "addSource" }
+  | { type: "removeSource"; sourceKey: string }
+  | { type: "disconnectAll" }
   | { type: "syncNow" }
-  | { type: "toggleSkill"; skillName: string; optIn: boolean }
+  | { type: "toggleSkill"; compositeKey: string; optIn: boolean }
   | { type: "getState" }
   | { type: "getCatalog" }
-  | { type: "loadBrowseRoot" }
-  | { type: "expandBrowsePath"; path: string }
+  | { type: "loadBrowseRoot"; sourceKey: string }
+  | { type: "expandBrowsePath"; sourceKey: string; path: string }
   | { type: "requestRecommendations" }
   | { type: "refreshRecommendations" }
   | { type: "askAgentToRecommend" }
@@ -89,7 +105,7 @@ export type ExtensionMessage =
     };
   }
   | { type: "error"; message: string }
-  | { type: "browseUpdate"; parentPath: string; entries: BrowseEntry[]; skillsRootPath?: string }
+  | { type: "browseUpdate"; sourceKey: string; parentPath: string; entries: BrowseEntry[]; skillsRootPath?: string }
   | { type: "catalogResult"; skills: SkillInfo[] }
   | {
     type: "recommendationsResult";

@@ -2,12 +2,21 @@ import * as vscode from "vscode";
 import { ConfigService } from "../services/ConfigService";
 import { SyncEngine } from "../services/SyncEngine";
 import { Logger } from "../utils/logger";
-import { deleteSkillFile, deleteSkillPackage, listExistingSkillFiles, listExistingSkillPackages } from "../utils/fileUtils";
+import {
+  deleteSkillFile,
+  deleteSkillPackage,
+  ExistingSkillFile,
+  ExistingSkillPackage,
+  listExistingSkillFiles,
+  listExistingSkillPackages
+} from "../utils/fileUtils";
 import { ServiceError } from "../services/ServiceError";
-import { SkillCatalogStore, currentSourceKey } from "../services/SkillCatalogStore";
+import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { CatalogService } from "../services/CatalogService";
-import { CategoryData, SkillInfo, SkillManagerState } from "../../webview-ui/types/messages";
-import { SkillMeta } from "../types";
+import { MultiSourceCatalogService } from "../services/MultiSourceCatalogService";
+import { CategoryData, SkillInfo, SkillManagerState, SkillSourceInfo, SkillSourceState } from "../../webview-ui/types/messages";
+import { ResolvedSource, SkillMeta } from "../types";
+import { compositeSkillKey, parseCompositeSkillKey } from "../utils/sources";
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
@@ -15,54 +24,57 @@ interface SkillManagerStateDependencies {
   logger: Logger;
   catalogStore: SkillCatalogStore;
   catalogService: CatalogService;
+  multiSourceService: MultiSourceCatalogService;
 }
 
 export async function buildSkillManagerState(deps: SkillManagerStateDependencies): Promise<SkillManagerState> {
-  const { configService, syncEngine, logger, catalogStore, catalogService } = deps;
-  const sourceMode = configService.getSourceMode();
-  const sourceRepository = configService.getSourceRepository();
-  const registryUrl = configService.getRegistryUrl();
-  const optedInSkills = configService.getOptedInSkills();
+  const { configService, syncEngine, logger, catalogStore, multiSourceService } = deps;
+  const sources = configService.getResolvedSources();
+  const optedInSkills = normalizeOptedInToComposite(configService.getOptedInSkills(), sources);
   const categories = configService.getCategories();
   const lastResult = syncEngine.getLastResult();
 
-  const sourceKey = currentSourceKey(configService);
-  const cached = catalogStore.load(sourceKey);
-  let catalogSize = cached?.metas.length ?? 0;
+  const sourceStates: SkillSourceState[] = sources.map((source) => ({
+    type: source.type,
+    value: source.value,
+    label: source.label,
+    sourceKey: source.sourceKey
+  }));
 
-  let connectionHealth: SkillManagerState["connectionHealth"] = "unknown";
+  let connectionHealth: SkillManagerState["connectionHealth"] = sources.length === 0 ? "unknown" : "ok";
+  let isConnected = sources.length > 0;
   let lastError: string | null = null;
-  let isConnected = false;
   let registryCategories: CategoryData[] = categories.map((name) => ({ name, skills: [] }));
+  let mergedMetas: SkillMeta[] = [];
+  let catalogSize = 0;
 
-  if (sourceMode === "github-repo") {
-    if (!sourceRepository.trim()) {
-      connectionHealth = "unknown";
-      isConnected = false;
-    } else {
-      const parsed = parseGithubRepoRef(sourceRepository);
-      if (!parsed?.owner || !parsed.repo) {
-        connectionHealth = "invalid_source";
-        lastError = "Repository format must be owner/repository.";
-        isConnected = false;
-      } else {
-        isConnected = true;
-        connectionHealth = "ok";
-      }
+  for (const source of sources) {
+    const cached = catalogStore.load(source.sourceKey);
+    if (cached?.metas?.length) {
+      catalogSize += cached.metas.length;
+      mergedMetas.push(
+        ...cached.metas.map((meta) => ({
+          ...meta,
+          source: { type: source.type, value: source.value, label: source.label, sourceKey: source.sourceKey }
+        }))
+      );
     }
-  } else if (!registryUrl.trim()) {
-    connectionHealth = "invalid_source";
-    lastError = "Registry URL is required for custom registry mode.";
-    isConnected = false;
-  } else {
-    isConnected = true;
+  }
+
+  const hasRegistry = sources.some((s) => s.type === "custom-registry");
+  if (hasRegistry) {
     try {
-      const skills = (await catalogService.getCatalog(sourceKey)).metas;
-      registryCategories = categorizeSkills(registryCategories, skills);
-      connectionHealth = "ok";
-      catalogSize = skills.length;
+      const merged = await multiSourceService.getMergedCatalog(sources);
+      mergedMetas = merged.metas;
+      catalogSize = merged.metas.length;
+      registryCategories = categorizeSkills(registryCategories, merged.metas);
+      const errors = merged.perSource.filter((p) => p.error).map((p) => `${p.source.label}: ${p.error}`);
+      if (errors.length > 0) {
+        lastError = errors.join("; ");
+        connectionHealth = "unknown";
+      }
     } catch (error) {
-      logger.error("Failed to build skill manager state (registry)", error);
+      logger.error("Failed to build skill manager state (multi-source)", error);
       if (error instanceof ServiceError) {
         connectionHealth = mapReasonToHealth(error.reason);
         lastError = error.message;
@@ -73,20 +85,49 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
     }
   }
 
-  const metaByName = new Map<string, SkillMeta>();
-  for (const m of cached?.metas ?? []) {
-    metaByName.set(m.name, m);
+  for (const source of sources) {
+    if (source.type === "github-repo") {
+      const parsed = parseGithubRepoRef(source.value);
+      if (!parsed?.owner || !parsed.repo) {
+        connectionHealth = "invalid_source";
+        lastError = lastError ?? `Source ${source.label}: repository format must be owner/repository.`;
+        isConnected = false;
+      }
+    } else if (!source.value.trim()) {
+      connectionHealth = "invalid_source";
+      lastError = lastError ?? `Source ${source.label}: registry URL is required.`;
+      isConnected = false;
+    }
   }
 
-  const enabledSkills: SkillInfo[] = optedInSkills.map((name) => {
-    const meta = metaByName.get(name);
+  const metaByCompositeKey = new Map<string, SkillMeta>();
+  for (const meta of mergedMetas) {
+    const label = meta.source?.label ?? sources[0]?.label;
+    if (!label) {
+      continue;
+    }
+    metaByCompositeKey.set(compositeSkillKey(label, meta.name), meta);
+  }
+
+  const enabledSkills: SkillInfo[] = optedInSkills.map((compositeKey) => {
+    const meta = metaByCompositeKey.get(compositeKey);
+    const parsed = parseCompositeSkillKey(compositeKey);
+    const fallbackLabel = parsed?.label ?? sources[0]?.label ?? "";
+    const fallbackName = parsed?.name ?? compositeKey;
+    const sourceInfo: SkillSourceInfo | undefined = meta?.source
+      ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
+      : sources.find((s) => s.label === fallbackLabel)
+        ? { label: fallbackLabel, type: sources.find((s) => s.label === fallbackLabel)!.type, sourceKey: sources.find((s) => s.label === fallbackLabel)!.sourceKey }
+        : undefined;
     return {
-      name,
+      compositeKey,
+      name: meta?.name ?? fallbackName,
       description: meta?.description ?? "",
       version: meta?.version ?? (meta?.shaOrVersion ? meta.shaOrVersion.slice(0, 7) : ""),
       category: meta?.category ?? "Enabled",
       skillType: meta?.skillType ?? "cursor-rule",
-      fileCount: meta?.skillFiles?.length
+      fileCount: meta?.skillFiles?.length,
+      source: sourceInfo
     };
   });
 
@@ -94,9 +135,8 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
     enabledSkills.length > 0 ? [{ name: "Enabled", skills: enabledSkills }] : [];
 
   return {
-    sourceRepository,
-    sourceMode,
-    categories: sourceMode === "custom-registry" ? registryCategories : categories.map((name) => ({ name, skills: [] })),
+    sources: sourceStates,
+    categories: hasRegistry ? registryCategories : categories.map((name) => ({ name, skills: [] })),
     enabledCategories,
     optedInSkills,
     lastSyncTime: syncEngine.getLastSyncTime()?.toISOString() ?? null,
@@ -107,7 +147,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
     lastError,
     catalogStatus: "idle",
     catalogError: null,
-    skillsRootPath: cached?.skillsRoot ?? null,
+    skillsRootPath: null,
     browseEntries: [],
     catalogSize
   };
@@ -115,8 +155,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
 
 export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): SkillManagerState {
   return {
-    sourceRepository: "",
-    sourceMode: "github-repo",
+    sources: [],
     categories: [],
     enabledCategories: [],
     optedInSkills: [],
@@ -135,9 +174,12 @@ export function fallbackSkillManagerState(partial: Partial<SkillManagerState>): 
   };
 }
 
-export async function disconnectSource(configService: ConfigService, catalogStore: SkillCatalogStore): Promise<boolean> {
+export async function disconnectAllSources(
+  configService: ConfigService,
+  catalogStore: SkillCatalogStore
+): Promise<boolean> {
   const confirm = await vscode.window.showWarningMessage(
-    "Disconnecting will remove synced files from .cursor/rules and .cursor/skills in this workspace.",
+    "Disconnecting will remove all configured skill sources and delete synced files from .cursor/rules and .cursor/skills in this workspace.",
     { modal: true },
     "Disconnect"
   );
@@ -146,39 +188,84 @@ export async function disconnectSource(configService: ConfigService, catalogStor
     return false;
   }
 
-  const sourceKey = currentSourceKey(configService);
-  catalogStore.clear(sourceKey);
+  const sources = configService.getResolvedSources();
+  for (const source of sources) {
+    catalogStore.clear(source.sourceKey);
+  }
 
-  await configService.setSourceRepository("");
+  await configService.setSources([]);
   await configService.setOptedInSkills([]);
+  const [existingFiles, existingPackages]: [ExistingSkillFile[], ExistingSkillPackage[]] = await Promise.all([
+    listExistingSkillFiles(),
+    listExistingSkillPackages()
+  ]);
+  await Promise.all([
+    ...existingFiles.map((entry) => entry.label && deleteSkillFile(entry.label, entry.name)),
+    ...existingPackages.map((entry) => entry.label && deleteSkillPackage(entry.label, entry.name))
+  ]);
+  return true;
+}
+
+export async function disconnectSource(
+  configService: ConfigService,
+  catalogStore: SkillCatalogStore,
+  sourceKey: string
+): Promise<boolean> {
+  const sources = configService.getResolvedSources();
+  const target = sources.find((s) => s.sourceKey === sourceKey);
+  if (!target) {
+    return false;
+  }
+  const confirm = await vscode.window.showWarningMessage(
+    `Remove source ${target.label}? Synced files in .cursor/rules/${target.label}/ and .cursor/skills/${target.label}/ will be deleted.`,
+    { modal: true },
+    "Remove"
+  );
+  if (confirm !== "Remove") {
+    return false;
+  }
+  catalogStore.clear(target.sourceKey);
+  await configService.removeSource((s) => s.type === target.type && s.value === target.value);
+  const remaining = configService.getOptedInSkills().filter((entry) => {
+    const parsed = parseCompositeSkillKey(entry);
+    return parsed ? parsed.label !== target.label : true;
+  });
+  await configService.setOptedInSkills(remaining);
+
   const [existingFiles, existingPackages] = await Promise.all([
     listExistingSkillFiles(),
     listExistingSkillPackages()
   ]);
   await Promise.all([
-    ...existingFiles.map((skillName) => deleteSkillFile(skillName)),
-    ...existingPackages.map((pkgName) => deleteSkillPackage(pkgName))
+    ...existingFiles
+      .filter((e) => e.label === target.label)
+      .map((e) => deleteSkillFile(e.label, e.name)),
+    ...existingPackages
+      .filter((e) => e.label === target.label)
+      .map((e) => deleteSkillPackage(e.label, e.name))
   ]);
   return true;
 }
 
-function categorizeSkills(
-  initialCategories: CategoryData[],
-  skills: Array<{ name: string; description?: string; version?: string; category?: string; shaOrVersion: string; skillType?: SkillMeta["skillType"]; skillFiles?: string[] }>
-): CategoryData[] {
+function categorizeSkills(initialCategories: CategoryData[], metas: SkillMeta[]): CategoryData[] {
   const categoryMap = new Map(initialCategories.map((category) => [category.name, category.skills]));
-  for (const skill of skills) {
-    const category = skill.category ?? "Uncategorized";
+  for (const meta of metas) {
+    const category = meta.category ?? "Uncategorized";
     if (!categoryMap.has(category)) {
       categoryMap.set(category, []);
     }
+    const label = meta.source?.label ?? "";
     categoryMap.get(category)?.push({
-      name: skill.name,
-      description: skill.description ?? "",
-      version: skill.version ?? skill.shaOrVersion.slice(0, 7),
+      compositeKey: compositeSkillKey(label, meta.name),
+      name: meta.name,
+      description: meta.description ?? "",
+      version: meta.version ?? meta.shaOrVersion.slice(0, 7),
       category,
-      skillType: skill.skillType ?? "cursor-rule",
-      fileCount: skill.skillFiles?.length
+      skillType: meta.skillType ?? "cursor-rule",
+      fileCount: meta.skillFiles?.length,
+      source: meta.source
+        ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
+        : undefined
     });
   }
   return [...categoryMap.entries()].map(([name, categorySkills]) => ({ name, skills: categorySkills }));
@@ -216,4 +303,31 @@ export function parseGithubRepoRef(repoRef: string): { owner: string; repo: stri
   }
 
   return null;
+}
+
+/**
+ * Promote any bare-name entries to composite keys using the first matching
+ * source. Used by the panel state code when a user toggled a skill before
+ * the persisted opted-in array had the chance to migrate (e.g. mid-flight).
+ */
+export function normalizeOptedInToComposite(entries: string[], sources: ResolvedSource[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    const parsed = parseCompositeSkillKey(entry);
+    if (parsed) {
+      if (!seen.has(entry)) {
+        seen.add(entry);
+        out.push(entry);
+      }
+      continue;
+    }
+    const fallbackLabel = sources[0]?.label ?? "";
+    const composite = fallbackLabel ? compositeSkillKey(fallbackLabel, entry) : entry;
+    if (!seen.has(composite)) {
+      seen.add(composite);
+      out.push(composite);
+    }
+  }
+  return out;
 }

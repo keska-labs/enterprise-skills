@@ -21,7 +21,7 @@ export function workspaceProfileFingerprint(profile: WorkspaceProfile): string {
 
 export function recommendationCacheCompositeKey(parts: {
   workspaceUri: string;
-  sourceKey: string;
+  sourcesKey: string;
   profileFp: string;
   catalogFp: string;
   modelFamily: string;
