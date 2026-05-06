@@ -129,9 +129,18 @@ export class SyncEngine implements vscode.Disposable {
       }
 
       const sourceByLabel = new Map(sources.map((s) => [s.label, s]));
+      const discoveryOnlyLabels = new Set(
+        sources.filter((s) => s.type === "official-skills" || s.type === "open-skills").map((s) => s.label)
+      );
       const targets = resolveOptedInTargets(optedIn, merged.byCompositeKey, sources);
 
       for (const target of targets) {
+        if (target.meta?.isDiscoveryOnly) {
+          result.errors.push(
+            `Skill ${target.compositeKey} is from a discovery-only source — enable it from the Skill Manager to add its GitHub repository.`
+          );
+          continue;
+        }
         if (!target.meta || !target.meta.path) {
           result.errors.push(`Skill ${target.compositeKey} not found in upstream.`);
           continue;
@@ -167,7 +176,7 @@ export class SyncEngine implements vscode.Disposable {
       // so we can prune anything that is no longer opted-in.
       const wanted = new Set<string>();
       for (const target of targets) {
-        if (!target.meta) {
+        if (!target.meta || target.meta.isDiscoveryOnly) {
           continue;
         }
         try {
@@ -183,6 +192,9 @@ export class SyncEngine implements vscode.Disposable {
           // Loose flat-layout file lingering from a failed migration; leave it alone.
           continue;
         }
+        if (discoveryOnlyLabels.has(entry.label)) {
+          continue;
+        }
         const key = `${entry.label}|${entry.name}`;
         if (!wanted.has(key)) {
           await deleteSkillFile(entry.label, entry.name);
@@ -195,6 +207,9 @@ export class SyncEngine implements vscode.Disposable {
       const existingPackages: ExistingSkillPackage[] = await listExistingSkillPackages();
       for (const entry of existingPackages) {
         if (!entry.label) {
+          continue;
+        }
+        if (discoveryOnlyLabels.has(entry.label)) {
           continue;
         }
         const key = `${entry.label}|${entry.name}`;

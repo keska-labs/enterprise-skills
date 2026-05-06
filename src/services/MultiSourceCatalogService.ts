@@ -47,6 +47,9 @@ export class MultiSourceCatalogService {
   ): Promise<MergedCatalog> {
     const perSource: PerSourceResult[] = await Promise.all(
       sources.map(async (source) => {
+        if (source.type === "official-skills" || source.type === "open-skills") {
+          return { source, snapshot: { skillsRoot: "", metas: [] } };
+        }
         try {
           const snapshot = await this.catalogService.getCatalog(source, { forceRefresh: opts?.forceRefresh ?? false });
           const result: PerSourceResult = { source, snapshot };

@@ -3,7 +3,7 @@ import { SkillMeta } from "../types";
 import { ConfigService } from "./ConfigService";
 import { buildSourceKey as buildSourceKeyFromTypes } from "../utils/sources";
 
-const STORAGE_VERSION = 4; // bumped: SkillMeta.triggers + browse merge preserves indexed manifests
+const STORAGE_VERSION = 6; // bumped: discovery sources no longer persist prefetched metas (LLM prompt only)
 
 interface StoredCatalogPayload {
   v: typeof STORAGE_VERSION;

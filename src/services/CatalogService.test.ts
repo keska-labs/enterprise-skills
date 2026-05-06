@@ -1,4 +1,4 @@
-import { CatalogService } from "./CatalogService";
+import { CatalogService, hasIncompleteSkillPackages } from "./CatalogService";
 import { SkillCatalogStore } from "./SkillCatalogStore";
 import { SourceProviderRegistry } from "./SourceProviderRegistry";
 import { SourceCatalogProvider } from "./SourceCatalogProvider";
@@ -170,5 +170,21 @@ describe("CatalogService", () => {
     const snapshot = await service.getCatalog(sourceKey);
     expect(snapshot.metas[0].shaOrVersion).toBe("new");
     expect(provider.fetchCatalog).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("hasIncompleteSkillPackages", () => {
+  it("treats discovery-only packages as cache-complete even without skillFiles", () => {
+    expect(
+      hasIncompleteSkillPackages([
+        {
+          name: "x",
+          shaOrVersion: "s",
+          skillType: "skill",
+          isDiscoveryOnly: true,
+          skillFiles: []
+        }
+      ])
+    ).toBe(false);
   });
 });
