@@ -2,6 +2,8 @@ import { SourceCatalogProvider } from "./SourceCatalogProvider";
 import { RepoService } from "./RepoService";
 import { RegistryService } from "./RegistryService";
 import { GithubCatalogProvider } from "./providers/GithubCatalogProvider";
+import { OfficialSkillsCatalogProvider } from "./providers/OfficialSkillsCatalogProvider";
+import { OpenSkillsCatalogProvider } from "./providers/OpenSkillsCatalogProvider";
 import { RegistryCatalogProvider } from "./providers/RegistryCatalogProvider";
 
 export class SourceProviderRegistry {
@@ -35,6 +37,18 @@ export class SourceProviderRegistry {
     if (sourceKey.startsWith("registry:")) {
       const url = sourceKey.slice("registry:".length).trim();
       const provider = new RegistryCatalogProvider(this.registryService, url || undefined);
+      this.providers.set(sourceKey, provider);
+      return provider;
+    }
+
+    if (sourceKey.startsWith("official-skills:")) {
+      const provider = new OfficialSkillsCatalogProvider();
+      this.providers.set(sourceKey, provider);
+      return provider;
+    }
+
+    if (sourceKey.startsWith("open-skills:")) {
+      const provider = new OpenSkillsCatalogProvider();
       this.providers.set(sourceKey, provider);
       return provider;
     }

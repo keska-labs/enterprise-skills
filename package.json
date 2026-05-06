@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {
@@ -123,8 +123,8 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["github-repo", "custom-registry"],
-                "description": "Source kind: GitHub repository (`owner/repo`) or custom HTTPS registry."
+                "enum": ["github-repo", "custom-registry", "official-skills", "open-skills"],
+                "description": "Source kind: GitHub (`owner/repo`), custom HTTPS registry, or discovery-only directories (officialskills.sh / skills.sh)."
               },
               "value": {
                 "type": "string",
