@@ -109,13 +109,14 @@ export function App(): React.JSX.Element {
         setBrowseBySource((prev) => {
           const current = prev[sourceKey] ?? emptyBrowseState();
           const nextChildren = { ...current.children, [data.parentPath]: data.entries };
+          const hasSkillsRootUpdate = data.skillsRootPath !== undefined;
           return {
             ...prev,
             [sourceKey]: {
               ...current,
               children: nextChildren,
               skillsRootPath: data.skillsRootPath ?? current.skillsRootPath,
-              treeLoading: data.skillsRootPath ? false : current.treeLoading,
+              treeLoading: hasSkillsRootUpdate ? false : current.treeLoading,
               expandingPath: null
             }
           };
@@ -200,7 +201,7 @@ export function App(): React.JSX.Element {
       return;
     }
     const existing = browseBySource[activeBrowseSourceKey];
-    if (existing?.skillsRootPath) {
+    if (existing && (existing.skillsRootPath !== null || existing.treeLoading)) {
       return;
     }
     setBrowseBySource((prev) => ({
@@ -401,7 +402,7 @@ export function App(): React.JSX.Element {
 
   const activeBrowse = activeBrowseSourceKey ? browseBySource[activeBrowseSourceKey] : undefined;
   const skillsRoot = activeBrowse?.skillsRootPath ?? null;
-  const rootEntries = skillsRoot ? activeBrowse?.children[skillsRoot] : undefined;
+  const rootEntries = skillsRoot !== null ? activeBrowse?.children[skillsRoot] : undefined;
 
   return (
     <main className="app-shell">
@@ -656,7 +657,7 @@ export function App(): React.JSX.Element {
                   <div className="surface-card-body">
                     {activeBrowse?.treeLoading && !rootEntries ? (
                       <BrowseTreeSkeleton />
-                    ) : !skillsRoot || !rootEntries || !activeBrowseSource || !activeBrowse ? (
+                    ) : skillsRoot === null || !rootEntries || !activeBrowseSource || !activeBrowse ? (
                       <p className="subtle tree-fallback">Waiting for repository data…</p>
                     ) : (
                       <BrowseTree
