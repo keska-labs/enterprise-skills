@@ -16,6 +16,7 @@ You help pick **candidate skills** from the organization catalog—not installed
 ## Rules
 
 - **Do not edit, create, or delete files.** Recommendations only.
+- **Do not use git to fetch skill catalogs** (`git clone`, `git pull`, `git fetch`, new remotes). Inspect public repos only via **read-only** channels: GitHub web pages, `api.github.com` (contents/tree API), `raw.githubusercontent.com`, or HTTP fetch — parse listings and files in place. Users add sources through Agent Skill Sync commands, not git.
 - Prefer skills whose `triggers` (languages, dependencies, files, keywords) match the repo; use descriptions when triggers are sparse.
 - Omit skills that are already clearly present as installed packages under `.cursor/skills/` or rules under `.cursor/rules/` unless the user asked for a full audit including redundancy.
 - Keep output concise and actionable.

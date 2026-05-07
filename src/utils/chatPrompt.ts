@@ -31,7 +31,7 @@ const MAX_KEYWORDS = 6;
  * once a sync has populated the workspace cache.
  */
 export const SKILL_RECOMMENDER_CHAT_PROMPT =
-  "Recommend Cursor agent skills for this workspace using the Agent Skill Sync skill-recommender subagent. Read `.cursor/skill-sync/catalog.json` if present, `.cursor/skills/` for already-installed packages, and stack files (package.json, AGENTS.md, etc.). Output grouped suggestions only — do not edit files.";
+  "Recommend Cursor agent skills for this workspace using the Agent Skill Sync skill-recommender subagent. Read `.cursor/skill-sync/catalog.json` if present, `.cursor/skills/` for already-installed packages, and stack files (package.json, AGENTS.md, etc.). Output grouped suggestions only — do not edit files. Do **not** `git clone`, `git pull`, or otherwise fetch skill catalogs with git; if you must inspect a public repo, use GitHub’s website, api.github.com, or raw file URLs only — parse pages/JSON in place.";
 
 function truncate(value: string, max: number): string {
   if (value.length <= max) {
@@ -123,13 +123,24 @@ ${candidateLines.join("\n")}${candidateOverflow}`
           .join("\n")}
 
 For every discovery directory above, before you respond:
-1. List **every** skill that exists in the repo (use available tools — GitHub API / file listing / web fetch — to enumerate the directory; do not rely on memory of a single popular skill).
+1. List **every** skill that exists in the repo using **read-only inspection**: open GitHub **HTML** pages, call **api.github.com** (contents/tree), or fetch **raw.githubusercontent.com** / similar HTTP endpoints — **parse the responses in place**. Do **not** run \`git clone\`, \`git pull\`, \`git fetch\`, or add remotes to materialize those repos locally. Do not rely on memory of a single popular skill.
 2. Evaluate **each** discovered skill against the workspace fingerprint (languages, dependencies, paths, AGENTS.md).
 3. Include **all** that are a plausible fit (Strong, Other, or General-purpose), not just the single most obvious one.
-4. For each discovery skill, note the GitHub coordinates inline as \`installSource.value = "owner/repo"\` and \`skillPath = "..."\` so the user can install it.`
+4. For each discovery skill, on the **same bullet** include markdown inline code for coordinates so they copy cleanly — use Repo: \`owner/repo\` and, when relevant, Path: \`directory/subdir\` (omit Path if the skill is at repo root).`
       : "";
 
+  const closingLines =
+    discoverySections.length > 0
+      ? `Please respond in three sections — **Strong matches**, **Other suggestions**, **General-purpose** — using one bullet per skill in the form \`**skill-name** — one sentence why\`. For skills from the **prefetched catalog** list above, use that bullet form only. For skills from **discovery directories**, each bullet must include Repo: \`owner/repo\` (and Path: \`...\` when needed).
+
+End your reply with exactly these two lines:
+- For discovery picks: copy the \`owner/repo\` from a suggestion and run **Skill Sync: Add GitHub Repository** from the Command Palette (Cmd+Shift+P on Mac, Ctrl+Shift+P on Windows/Linux; command id \`skillSync.addGithubRepo\`).
+- For catalog picks: open **Skill Sync: Manage AI Skills** (\`skillSync.manageSkills\`) to enable skills from synced sources.`
+      : `Please respond in three sections — **Strong matches**, **Other suggestions**, **General-purpose** — using one bullet per skill in the form \`**skill-name** — one sentence why\`. End with one line telling me to run **Skill Sync: Manage AI Skills** (\`skillSync.manageSkills\`) to enable the picks.`;
+
   return `Use the Agent Skill Sync **skill-recommender** subagent (\`agents/skill-recommender.md\`) to pick the best Cursor agent skills for this workspace. Recommend only — do not edit files.
+
+**No git for remote catalogs:** Do **not** \`git clone\`, \`git pull\`, \`git fetch\`, or otherwise download skill repositories. The user installs sources through **Skill Sync**, not git. To learn what exists in a public GitHub repo, use **read-only** means only: browse github.com pages, \`api.github.com\` (contents/tree), \`raw.githubusercontent.com\`, or other HTTP fetch — then **parse** HTML/JSON/text. Never check out those repos into this workspace.
 
 Workspace fingerprint
 - Languages: ${languagesLine}
@@ -140,7 +151,7 @@ Workspace fingerprint
 
 ${installedSection}${candidateSection}${discoverySection}
 
-Please respond in three sections — **Strong matches**, **Other suggestions**, **General-purpose** — using one bullet per skill in the form \`**skill-name** — one sentence why\`. Combine catalog candidates with **all relevant discovery skills you enumerated above** — do not stop at one or two from each discovery repo if more fit the fingerprint. End with one line telling me to run **Skill Sync: Manage AI Skills** (\`skillSync.manageSkills\`) to enable the picks.`;
+${closingLines}`;
 }
 
 export async function resolveChatPromptCommand(): Promise<string | undefined> {
