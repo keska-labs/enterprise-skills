@@ -18,6 +18,7 @@ import { recommendationCacheCompositeKey, workspaceProfileFingerprint } from "./
 import { LlmRecommendationCache } from "./LlmRecommendationCache";
 import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
 import { RecommenderProviderId } from "./llm/types";
+import type { LlmStreamSink } from "./llm/streamEvents";
 import { combinedSourcesKey, compositeSkillKey } from "../utils/sources";
 import { DiscoveryPromptSection, resolveDiscoverySourceForRecommendation } from "./discoveryPrompt";
 
@@ -57,8 +58,9 @@ export class LlmSkillRecommender {
     discoverySections?: DiscoveryPromptSection[];
     forceRefresh: boolean;
     token: vscode.CancellationToken;
+    onStreamEvent?: LlmStreamSink;
   }): Promise<RecommendationsLlmResult> {
-    const { profile, metas, optedInSkills, forceRefresh, token } = params;
+    const { profile, metas, optedInSkills, forceRefresh, token, onStreamEvent } = params;
     const discoverySections = params.discoverySections ?? [];
     const sourcesKey =
       params.sources && params.sources.length > 0
@@ -70,6 +72,11 @@ export class LlmSkillRecommender {
     const heuristicList = recommend(profile, metas, optedInSkills);
 
     if (!this.configService.getRecommendationsUseLlm()) {
+      onStreamEvent?.({
+        type: "status",
+        providerId: "recommendations",
+        message: "LLM disabled in settings — using heuristic ranking."
+      });
       return { recommendations: heuristicList, source: "heuristic", discoveryMetasByCompositeKey: emptyDiscovery };
     }
 
@@ -99,6 +106,11 @@ export class LlmSkillRecommender {
     if (!forceRefresh) {
       const hit = this.cache.get(cacheKey);
       if (hit) {
+        onStreamEvent?.({
+          type: "status",
+          providerId: hit.providerId ?? "cache",
+          message: "Served from cache."
+        });
         return {
           recommendations: hit.recommendations,
           source: hit.source,
@@ -112,6 +124,12 @@ export class LlmSkillRecommender {
 
     const prompt = buildRecommendationPrompt(profile, metas, optedInSkills, discoverySections);
     const validNames = new Set(metas.map((m) => m.name));
+
+    onStreamEvent?.({
+      type: "status",
+      providerId: "recommendations",
+      message: "Contacting language model providers…"
+    });
 
     const [openAiKey, anthropicKey, cursorKey] = await Promise.all([
       this.secrets.get(RECOMMENDATION_SECRET_KEYS.openai),
@@ -133,7 +151,8 @@ export class LlmSkillRecommender {
       },
       prompt,
       token,
-      this.logger
+      this.logger,
+      onStreamEvent
     );
 
     if (chainResult) {
@@ -224,6 +243,11 @@ export class LlmSkillRecommender {
       source: "heuristic",
       discoveryMetasByCompositeKey: emptyDiscovery
     };
+    onStreamEvent?.({
+      type: "status",
+      providerId: "recommendations",
+      message: "No usable LLM output — falling back to heuristic ranking."
+    });
     this.cache.set(cacheKey, fallback, ttlMs);
     return fallback;
   }

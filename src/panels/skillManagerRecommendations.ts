@@ -9,6 +9,7 @@ import { ResolvedSource, SkillMeta } from "../types";
 import { SourceProviderRegistry } from "../services/SourceProviderRegistry";
 import { Logger } from "../utils/logger";
 import { loadDiscoveryPromptSections } from "../services/discoveryPrompt";
+import type { LlmStreamSink } from "../../webview-ui/types/llmStreamEvents";
 
 interface MergedCachedCatalog {
   metas: SkillMeta[];
@@ -50,7 +51,7 @@ export async function buildRecommendationsPayload(
   llmSkillRecommender: LlmSkillRecommender,
   providerRegistry: SourceProviderRegistry,
   logger: Logger,
-  options?: { forceRefresh?: boolean; token?: vscode.CancellationToken }
+  options?: { forceRefresh?: boolean; token?: vscode.CancellationToken; onStreamEvent?: LlmStreamSink }
 ): Promise<{
   recommendations: Recommendation[];
   catalogReady: boolean;
@@ -92,7 +93,8 @@ export async function buildRecommendationsPayload(
     sources: merged.sources,
     discoverySections,
     forceRefresh: options?.forceRefresh ?? false,
-    token
+    token,
+    onStreamEvent: options?.onStreamEvent
   });
 
   return {
