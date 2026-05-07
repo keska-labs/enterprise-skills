@@ -53,6 +53,7 @@ const mockVscode = {
     showWarningMessage: jest.fn().mockResolvedValue(undefined),
     showErrorMessage: jest.fn(),
     showQuickPick: jest.fn(),
+    showInputBox: jest.fn(),
     withProgress: jest.fn((_options, task) => task())
   },
   commands: {
@@ -76,6 +77,7 @@ const mockVscode = {
   },
   env: {
     clipboard: {
+      readText: jest.fn().mockResolvedValue(""),
       writeText: jest.fn().mockResolvedValue(undefined)
     },
     openExternal: jest.fn().mockResolvedValue(true),

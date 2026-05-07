@@ -6,7 +6,9 @@ import { SyncEngine } from "../services/SyncEngine";
 import { SkillCatalogStore } from "../services/SkillCatalogStore";
 import { Logger } from "../utils/logger";
 import { RepoInfo, SourceConfig, SyncResult } from "../types";
+import { ServiceError } from "../services/ServiceError";
 import { formatStaleSources } from "../utils/staleSources";
+import { parseRepoSpec } from "../utils/repoSpec";
 import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
 import { AGGREGATOR_DIRECTORY_VALUE, deriveSourceLabel, sourceTypeLabel } from "../utils/sources";
 import {
@@ -150,6 +152,109 @@ async function addGithubSource(
   showSyncOutcome(syncResult, logger, "Initial sync");
 }
 
+async function resolveCanonicalGithubRepoFullName(
+  repoService: RepoService,
+  parsed: { owner: string; repo: string },
+  logger: Logger,
+  allowSignInRetry: boolean
+): Promise<string | undefined> {
+  try {
+    const info = await repoService.getRepoInfo(parsed.owner, parsed.repo);
+    if (!info) {
+      vscode.window.showErrorMessage(
+        `Could not find ${parsed.owner}/${parsed.repo}, or your GitHub session does not have access to it.`
+      );
+      return undefined;
+    }
+    return info.fullName;
+  } catch (error) {
+    if (allowSignInRetry && error instanceof ServiceError && error.reason === "no_session") {
+      const choice = await vscode.window.showWarningMessage(
+        "GitHub sign-in is required to verify and add a repository.",
+        "Sign In"
+      );
+      if (choice !== "Sign In") {
+        return undefined;
+      }
+      await vscode.commands.executeCommand("skillSync.signIn");
+      return resolveCanonicalGithubRepoFullName(repoService, parsed, logger, false);
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error("Failed to verify repository", error);
+    vscode.window.showErrorMessage(`Failed to verify repository: ${message}`);
+    return undefined;
+  }
+}
+
+/**
+ * Command palette flow: enter `owner/repo` or URL directly (clipboard pre-filled when it parses).
+ */
+export async function addGithubRepoCommand(
+  _authService: AuthService,
+  configService: ConfigService,
+  repoService: RepoService,
+  syncEngine: SyncEngine,
+  logger: Logger
+): Promise<void> {
+  let clipboardPrefill = "";
+  try {
+    clipboardPrefill = (await vscode.env.clipboard.readText()).trim();
+  } catch {
+    /* clipboard unavailable */
+  }
+  const parsedClipboard = parseRepoSpec(clipboardPrefill);
+  const initialValue = parsedClipboard ? `${parsedClipboard.owner}/${parsedClipboard.repo}` : undefined;
+
+  const raw = await vscode.window.showInputBox({
+    title: "Add GitHub repository",
+    prompt: "Enter owner/repo or a GitHub URL (HTTPS or SSH).",
+    value: initialValue,
+    validateInput: (value) => {
+      if (!value?.trim()) {
+        return "Repository is required.";
+      }
+      return parseRepoSpec(value) ? null : "Enter owner/repo, a github.com URL, or git@github.com:owner/repo.";
+    },
+    ignoreFocusOut: true
+  });
+
+  if (!raw?.trim()) {
+    return;
+  }
+
+  const parsed = parseRepoSpec(raw);
+  if (!parsed) {
+    return;
+  }
+
+  const typed = `${parsed.owner}/${parsed.repo}`;
+  const candidateLower = typed.toLowerCase();
+  const duplicate = configService.getSources().some(
+    (s) => s.type === "github-repo" && s.value.trim().toLowerCase() === candidateLower
+  );
+  if (duplicate) {
+    vscode.window.showInformationMessage(`GitHub source ${typed} is already configured.`);
+    return;
+  }
+
+  const fullName = await resolveCanonicalGithubRepoFullName(repoService, parsed, logger, true);
+  if (!fullName) {
+    return;
+  }
+
+  const source: SourceConfig = { type: "github-repo", value: fullName };
+  const label = await promptForLabel(source);
+  if (label !== undefined && label.length > 0) {
+    source.label = label;
+  }
+
+  await configService.addSource(source);
+  logger.log(`Added GitHub source ${fullName}`);
+  vscode.window.showInformationMessage(`Added GitHub source ${fullName}. Running sync...`);
+  const syncResult = await syncEngine.sync(true);
+  showSyncOutcome(syncResult, logger, "Initial sync");
+}
+
 /**
  * Show a QuickPick of the user's accessible repositories and react to typing.
  *
@@ -255,34 +360,6 @@ function pickGithubRepo(
 
     quickPick.show();
   });
-}
-
-/**
- * Parse `owner/repo`, GitHub URLs, or SSH refs into `{ owner, repo }`. Returns
- * `null` for anything that doesn't look like a valid repo reference.
- */
-function parseRepoSpec(raw: string): { owner: string; repo: string } | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  const urlMatch = trimmed.match(/^https?:\/\/github\.com\/([^/\s]+)\/([^/\s?#]+?)(?:\.git)?(?:[/?#].*)?$/i);
-  if (urlMatch) {
-    return { owner: urlMatch[1], repo: urlMatch[2] };
-  }
-
-  const sshMatch = trimmed.match(/^git@github\.com:([^/\s]+)\/([^/\s]+?)(?:\.git)?$/i);
-  if (sshMatch) {
-    return { owner: sshMatch[1], repo: sshMatch[2] };
-  }
-
-  const slashMatch = trimmed.match(/^([^/\s]+)\/([^/\s]+?)(?:\.git)?$/);
-  if (slashMatch) {
-    return { owner: slashMatch[1], repo: slashMatch[2] };
-  }
-
-  return null;
 }
 
 async function addRegistrySource(
@@ -454,6 +531,9 @@ export function registerCommands(
   safeRegisterCommand(context, "skillSync.focusSidebar", () => focusSkillSidebar());
   safeRegisterCommand(context, "skillSync.configureSource", async () => {
     await configureSource(authService, configService, repoService, syncEngine, logger);
+  });
+  safeRegisterCommand(context, "skillSync.addGithubRepo", async () => {
+    await addGithubRepoCommand(authService, configService, repoService, syncEngine, logger);
   });
   safeRegisterCommand(context, "skillSync.removeSource", async () => {
     await removeSourceCommand(configService, catalogStore, logger);
