@@ -1,4 +1,4 @@
-import { buildRecommendationPrompt } from "./promptBuilder";
+import { buildRecommendationPrompt, wrapPromptForCursorSdkAgentRanking } from "./promptBuilder";
 import { WorkspaceProfile } from "../WorkspaceAnalyzer";
 import { ResolvedSource, SkillMeta } from "../../types";
 import { DiscoveryPromptSection } from "../discoveryPrompt";
@@ -52,5 +52,15 @@ describe("buildRecommendationPrompt", () => {
     const prompt = buildRecommendationPrompt(profile(), [meta], [], []);
     expect(prompt).not.toContain("Discovery directories");
     expect(prompt).not.toContain("installSource");
+  });
+});
+
+describe("wrapPromptForCursorSdkAgentRanking", () => {
+  it("prepends streaming narration guidance and preserves the task body", () => {
+    const task = "TASK_BODY_UNIQUE_XYZ";
+    const wrapped = wrapPromptForCursorSdkAgentRanking(task);
+    expect(wrapped).toContain("[Skill Manager — streaming]");
+    expect(wrapped).toContain("TASK_BODY_UNIQUE_XYZ");
+    expect(wrapped.indexOf("[Skill Manager — streaming]")).toBeLessThan(wrapped.indexOf("TASK_BODY_UNIQUE_XYZ"));
   });
 });

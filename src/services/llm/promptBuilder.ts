@@ -15,6 +15,22 @@ function truncate(s: string, max: number): string {
 }
 
 /**
+ * Prepended only when ranking runs through the Cursor SDK agent (`CursorSdkProvider`).
+ * Encourages streamed narration so the Skill Manager transcript stays informative.
+ * Not used for OpenAI/Anthropic/vscode.lm or for the "Ask the Agent" chat seed (`buildAskAgentPrompt`).
+ */
+export function wrapPromptForCursorSdkAgentRanking(taskPrompt: string): string {
+  return `[Skill Manager — streaming]
+The Recommended tab shows your streamed assistant text, thinking, and tool steps. While you work, briefly narrate meaningful progress (e.g. which discovery repo you are weighing, which workspace signals matter, what you are about to search or read)—one short sentence per distinct step is enough; avoid repeating yourself when nothing new happened.
+
+When you are ready to return rankings, your **final** message body must be **only** the JSON object described in the task below (no markdown code fences, no prose before or after that JSON).
+
+---
+
+${taskPrompt}`;
+}
+
+/**
  * Single user message for chat-completion APIs ranking catalog skills for a workspace.
  */
 export function buildRecommendationPrompt(
@@ -93,7 +109,7 @@ ${catalogSection}
 
 ${
   discoverySections.length > 0
-    ? `Discovery directories (public GitHub repos — **no precomputed catalog**; you have no tools, so use your own training knowledge of these well-known repos):
+    ? `Discovery directories (public GitHub repos — **no precomputed catalog** here; use your training knowledge of those repos, or browse them with available tools if your runtime provides them):
 ${discoveryBlocks}
 
 For each discovery directory:
