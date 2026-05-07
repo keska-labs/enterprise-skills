@@ -28,6 +28,7 @@ import {
   DISCOVERY_SUMMARY_SKILL_NAME,
   discoveryDirectorySkillInfos
 } from "../services/discoveryPrompt";
+import { createRecommendationsStreamBridge } from "../utils/recommendationsStreamBridge";
 
 export class SkillManagerPanel {
   private static currentPanel: SkillManagerPanel | undefined;
@@ -284,6 +285,9 @@ export class SkillManagerPanel {
     this.recommendationsCts?.dispose();
     this.recommendationsCts = new vscode.CancellationTokenSource();
 
+    this.panel.webview.postMessage({ type: "recommendationsStreamStart" });
+    const bridge = createRecommendationsStreamBridge((msg) => this.panel.webview.postMessage(msg));
+
     try {
       const payload = await buildRecommendationsPayload(
         this.workspaceAnalyzer,
@@ -292,18 +296,35 @@ export class SkillManagerPanel {
         this.llmSkillRecommender,
         this.providerRegistry,
         this.logger,
-        { forceRefresh, token: this.recommendationsCts.token }
+        {
+          forceRefresh,
+          token: this.recommendationsCts.token,
+          onStreamEvent: bridge.sink
+        }
       );
+      bridge.flush();
       const { discoveryMetasByCompositeKey, ...rest } = payload;
       this.lastDiscoveryRecommendationMetas = new Map(Object.entries(discoveryMetasByCompositeKey ?? {}));
       this.panel.webview.postMessage({ type: "recommendationsResult", ...rest });
+      bridge.flush();
+      const cancelled = this.recommendationsCts.token.isCancellationRequested;
+      this.panel.webview.postMessage({
+        type: "recommendationsStreamEnd",
+        outcome: cancelled ? "cancelled" : "ok",
+        providerId: rest.providerId
+      });
     } catch (error: unknown) {
+      bridge.flush();
       this.logger.error("Recommendations failed", error);
       this.panel.webview.postMessage({
         type: "recommendationsResult",
         recommendations: [],
         catalogReady: false,
         source: "heuristic"
+      });
+      this.panel.webview.postMessage({
+        type: "recommendationsStreamEnd",
+        outcome: "error"
       });
     }
   }
