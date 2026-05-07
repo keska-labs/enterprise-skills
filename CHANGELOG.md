@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Add GitHub Repository:** new Command Palette command **Skill Sync: Add GitHub Repository** (`skillSync.addGithubRepo`) to paste or type `owner/repo` / URL, verify via GitHub, and append as a skill source (clipboard pre-fill when it parses; optional sign-in retry). **Ask the Agent** prompts now tell the subagent to emit discovery picks with copyable `` `owner/repo` `` inline code and to end with instructions for that command plus **Manage AI Skills** for catalog picks.
+- **Recommended tab:** **Refresh** and **Ask the Agent** stay in the toolbar above the loading state. Refresh cancels any in-flight ranking (via the recommendation cancellation token) and starts again; the AI-ranking badge appears once a result arrives.
+- **Ask the Agent / skill-recommender:** prompts and \`agents/skill-recommender.md\` now tell the agent **not** to \`git clone\`/\`git pull\` skill catalogs; use GitHub web/API/raw HTTP and parse responses instead.
+
 ## 0.8.0
 
 - **Public skill directories:** add optional sources **Official Agent Skills** ([officialskills.sh](https://officialskills.sh)) and **Open Agent Skills** ([skills.sh](https://skills.sh)). Both are **discovery-only** and **no longer prefetch** thousands of rows into the merged catalog (GitHub + custom registry stay cached there). Instead, the LLM prompt embeds a **short descriptor** per source (repo URL + skill-layout hint) — **no README markdown is shipped** — and the model uses its own knowledge of those well-known public repos to suggest concrete skills. The response includes `installSource` (`owner/repo`, optional `skillPath`) plus `discoverySourceKey` when multiple directories are configured. **Heuristic-only** setups skip directory-derived picks unless an LLM path runs. The Skill Manager Catalog tab shows a non-installable summary row per directory; installs from listings use the Recommended flow. Singleton entries use `type: "official-skills" | "open-skills"` and `value: "directory"`. Persisted catalog cache **v6** drops legacy prefetched directory snapshots; LLM recommendation cache bumped to **v4**.
