@@ -54,6 +54,11 @@
   opacity: 0.92;
 }
 
+/* Keep “Ask the Agent” reachable while rankings load (toolbar stays above the spinner). */
+.rec-toolbar-button--ask {
+  margin-left: auto;
+}
+
 .recommended-layout {
   display: flex;
   flex-direction: column;

@@ -485,6 +485,41 @@ export function App(): React.JSX.Element {
           </div>
           {mainTab === "recommended" ? (
             <div id="tab-panel-recommended" role="tabpanel" aria-labelledby="tab-recommended">
+              <div className="recommended-toolbar" role="toolbar" aria-label="Recommendation actions">
+                {!recommendationsLoading && recCatalogReady ? (
+                  <>
+                    <span
+                      className={`rec-source-badge${recSource === "llm" ? " rec-source-badge--ai" : " rec-source-badge--muted"}`}
+                    >
+                      {recSource === "llm" ? "AI-ranked" : "Heuristic"}
+                    </span>
+                    {recProviderId ? (
+                      <span className="rec-provider-hint" title="LLM provider used for ranking">
+                        via {recProviderId}
+                      </span>
+                    ) : null}
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="rec-toolbar-button"
+                  title={
+                    recommendationsLoading
+                      ? "Cancel the in-flight ranking and start again"
+                      : "Re-run workspace ranking"
+                  }
+                  onClick={onRefreshRecommendations}
+                >
+                  Refresh
+                </button>
+                <button
+                  type="button"
+                  className="rec-toolbar-button rec-toolbar-button--secondary rec-toolbar-button--ask"
+                  onClick={onAskAgentRecommend}
+                >
+                  Ask the Agent
+                </button>
+              </div>
               {recommendationsLoading ? (
                 <div className="recommended-loading" aria-busy="true">
                   <div>Analyzing workspace and catalog…</div>
@@ -494,30 +529,6 @@ export function App(): React.JSX.Element {
                 </div>
               ) : (
                 <>
-                  {recCatalogReady ? (
-                    <div className="recommended-toolbar" role="toolbar" aria-label="Recommendation actions">
-                      <span
-                        className={`rec-source-badge${recSource === "llm" ? " rec-source-badge--ai" : " rec-source-badge--muted"}`}
-                      >
-                        {recSource === "llm" ? "AI-ranked" : "Heuristic"}
-                      </span>
-                      {recProviderId ? (
-                        <span className="rec-provider-hint" title="LLM provider used for ranking">
-                          via {recProviderId}
-                        </span>
-                      ) : null}
-                      <button type="button" className="rec-toolbar-button" onClick={onRefreshRecommendations}>
-                        Refresh
-                      </button>
-                      <button
-                        type="button"
-                        className="rec-toolbar-button rec-toolbar-button--secondary"
-                        onClick={onAskAgentRecommend}
-                      >
-                        Ask the Agent
-                      </button>
-                    </div>
-                  ) : null}
                   {!recCatalogReady ? (
                     <section className="callout-card callout-card--subtle">
                       <div className="callout-body">

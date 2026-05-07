@@ -71,6 +71,10 @@
         "title": "Skill Sync: Add Skill Source"
       },
       {
+        "command": "skillSync.addGithubRepo",
+        "title": "Skill Sync: Add GitHub Repository"
+      },
+      {
         "command": "skillSync.removeSource",
         "title": "Skill Sync: Remove Skill Source"
       },

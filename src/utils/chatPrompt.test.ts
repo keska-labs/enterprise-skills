@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { buildAskAgentPrompt, seedChatWithPrompt } from "./chatPrompt";
 import { WorkspaceProfile } from "../services/WorkspaceAnalyzer";
+import { DiscoveryPromptSection } from "../services/discoveryPrompt";
 import { SkillMeta } from "../types";
 
 type MockEnv = {
@@ -51,6 +52,13 @@ const META_RULE: SkillMeta = {
 };
 
 describe("buildAskAgentPrompt", () => {
+  it("forbids git clone/pull for remote skill repos", () => {
+    const prompt = buildAskAgentPrompt(makeProfile(), [META_A], []);
+    expect(prompt).toMatch(/git clone/i);
+    expect(prompt).toMatch(/git pull/i);
+    expect(prompt).toMatch(/api\.github\.com/i);
+  });
+
   it("includes workspace fingerprint and catalog candidates", () => {
     const prompt = buildAskAgentPrompt(makeProfile(), [META_A, META_B, META_RULE], []);
     expect(prompt).toContain("Workspace fingerprint");
@@ -78,6 +86,28 @@ describe("buildAskAgentPrompt", () => {
   it("ends with the manage skills hint", () => {
     const prompt = buildAskAgentPrompt(makeProfile(), [META_A], []);
     expect(prompt).toMatch(/Skill Sync: Manage AI Skills/);
+  });
+
+  it("when discovery directories are configured, asks for inline Repo coordinates and the Add GitHub Repository command", () => {
+    const discovery: DiscoveryPromptSection[] = [
+      {
+        source: {
+          type: "open-skills",
+          value: "directory",
+          label: "Open Agent Skills",
+          sourceKey: "src-open"
+        },
+        repoUrl: "https://github.com/example/agent-skills",
+        structureHint: "Skill packages under skills/"
+      }
+    ];
+    const prompt = buildAskAgentPrompt(makeProfile(), [META_A], [], discovery);
+    expect(prompt).toContain("Discovery directories");
+    expect(prompt).toContain("Repo: `owner/repo`");
+    expect(prompt).toContain("Skill Sync: Add GitHub Repository");
+    expect(prompt).toContain("skillSync.addGithubRepo");
+    expect(prompt).toContain("Cmd+Shift+P");
+    expect(prompt).toContain("Skill Sync: Manage AI Skills");
   });
 });
 
