@@ -6,9 +6,11 @@ import { EnabledEmptyCallout } from "./components/EnabledEmptyCallout";
 import { EmptyState } from "./components/EmptyState";
 import { Header } from "./components/Header";
 import { RecommendedSkillList } from "./components/RecommendedSkillList";
+import { RecommendationsStreamView, appendRecoStreamEvent } from "./components/RecommendationsStreamView";
 import {
   BrowseEntry,
   ExtensionMessage,
+  LlmStreamEvent,
   Recommendation,
   SkillInfo,
   SkillManagerMainTab,
@@ -69,6 +71,8 @@ export function App(): React.JSX.Element {
   const [recCatalogReady, setRecCatalogReady] = useState(false);
   const [recSource, setRecSource] = useState<"llm" | "heuristic">("heuristic");
   const [recProviderId, setRecProviderId] = useState<string | undefined>();
+  const [recStreamEvents, setRecStreamEvents] = useState<LlmStreamEvent[]>([]);
+  const [recStreamLive, setRecStreamLive] = useState(false);
 
   const prevSourcesKey = useRef<string | null>(null);
   const stateRef = useRef<SkillManagerState | null>(null);
@@ -131,6 +135,15 @@ export function App(): React.JSX.Element {
         setRecSource(data.catalogReady ? data.source : "heuristic");
         setRecProviderId(data.providerId);
         setRecommendationsLoading(false);
+        setRecStreamLive(false);
+        setRecStreamEvents([]);
+      } else if (data.type === "recommendationsStreamStart") {
+        setRecStreamLive(true);
+        setRecStreamEvents([]);
+      } else if (data.type === "recommendationsStreamEvent") {
+        setRecStreamEvents((prev) => appendRecoStreamEvent(prev, data.event));
+      } else if (data.type === "recommendationsStreamEnd") {
+        /* Outcome is informational; transcript hides with recommendationsResult. */
       }
     };
     window.addEventListener("message", handleMessage);
@@ -155,6 +168,8 @@ export function App(): React.JSX.Element {
       setRecommendationsLoading(false);
       setRecSource("heuristic");
       setRecProviderId(undefined);
+      setRecStreamEvents([]);
+      setRecStreamLive(false);
     }
     prevSourcesKey.current = key;
   }, [state?.sources]);
@@ -521,12 +536,16 @@ export function App(): React.JSX.Element {
                 </button>
               </div>
               {recommendationsLoading ? (
-                <div className="recommended-loading" aria-busy="true">
-                  <div>Analyzing workspace and catalog…</div>
-                  <div className="recommended-loading-dots" aria-hidden>
-                    <span /><span /><span />
+                recStreamLive ? (
+                  <RecommendationsStreamView events={recStreamEvents} streaming />
+                ) : (
+                  <div className="recommended-loading" aria-busy="true">
+                    <div>Analyzing workspace and catalog…</div>
+                    <div className="recommended-loading-dots" aria-hidden>
+                      <span /><span /><span />
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <>
                   {!recCatalogReady ? (
