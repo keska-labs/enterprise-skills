@@ -2,6 +2,9 @@ import { ResolvedSource, SourceConfig, SourceMode, SourceType } from "../types";
 
 const COMPOSITE_SEP = "/";
 
+/** Sentinel `skillSync.sources[].value` for singleton aggregator sources. */
+export const AGGREGATOR_DIRECTORY_VALUE = "directory";
+
 /**
  * Derive a short, stable label for a source when the user has not supplied one.
  *
@@ -14,6 +17,13 @@ const COMPOSITE_SEP = "/";
 export function deriveSourceLabel(source: SourceConfig): string {
   if (typeof source.label === "string" && source.label.trim().length > 0) {
     return sanitizeSourceLabel(source.label);
+  }
+
+  if (source.type === "official-skills") {
+    return sanitizeSourceLabel("officialskills-sh");
+  }
+  if (source.type === "open-skills") {
+    return sanitizeSourceLabel("skills-sh");
   }
 
   if (source.type === "github-repo") {
@@ -69,11 +79,17 @@ function sanitizeLabelSegment(segment: string): string {
   return cleaned.replace(/^-|-$/g, "");
 }
 
-export function buildSourceKey(type: SourceMode, value: string): string {
+export function buildSourceKey(type: SourceType, value: string): string {
   if (type === "github-repo") {
     return `github:${value.trim()}`;
   }
-  return `registry:${value.trim()}`;
+  if (type === "custom-registry") {
+    return `registry:${value.trim()}`;
+  }
+  if (type === "official-skills") {
+    return `official-skills:${value.trim()}`;
+  }
+  return `open-skills:${value.trim()}`;
 }
 
 export function resolveSource(source: SourceConfig): ResolvedSource {
@@ -138,5 +154,16 @@ export function combinedSourcesKey(resolvedSources: ResolvedSource[]): string {
 }
 
 export function sourceTypeLabel(type: SourceType): string {
-  return type === "github-repo" ? "GitHub" : "Registry";
+  switch (type) {
+    case "github-repo":
+      return "GitHub";
+    case "custom-registry":
+      return "Registry";
+    case "official-skills":
+      return "Official skills";
+    case "open-skills":
+      return "Open skills";
+    default:
+      return "Registry";
+  }
 }

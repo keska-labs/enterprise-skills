@@ -8,7 +8,7 @@ import { Logger } from "../utils/logger";
 import { RepoInfo, SourceConfig, SyncResult } from "../types";
 import { formatStaleSources } from "../utils/staleSources";
 import { RECOMMENDATION_SECRET_KEYS } from "../constants/recommendationSecrets";
-import { deriveSourceLabel, sourceTypeLabel } from "../utils/sources";
+import { AGGREGATOR_DIRECTORY_VALUE, deriveSourceLabel, sourceTypeLabel } from "../utils/sources";
 import {
   deleteSkillFile,
   deleteSkillPackage,
@@ -31,7 +31,17 @@ export async function configureSource(
   const sourceTypePick = await vscode.window.showQuickPick(
     [
       { label: "GitHub repository", description: "Sync skills from a GitHub repo (owner/repo)", value: "github-repo" as const },
-      { label: "Custom registry", description: "Sync skills from an HTTPS registry URL", value: "custom-registry" as const }
+      { label: "Custom registry", description: "Sync skills from an HTTPS registry URL", value: "custom-registry" as const },
+      {
+        label: "Official Agent Skills (officialskills.sh)",
+        description: "Discovery-only catalog from awesome-agent-skills — enabling adds the backing GitHub repo",
+        value: "official-skills" as const
+      },
+      {
+        label: "Open Agent Skills (skills.sh)",
+        description: "Discovery-only curated skills from vercel-labs/agent-skills — enabling adds that GitHub repo",
+        value: "open-skills" as const
+      }
     ],
     { placeHolder: "Choose a skill source type to add" }
   );
@@ -45,7 +55,36 @@ export async function configureSource(
     return;
   }
 
-  await addRegistrySource(configService, syncEngine, logger);
+  if (sourceTypePick.value === "custom-registry") {
+    await addRegistrySource(configService, syncEngine, logger);
+    return;
+  }
+
+  if (sourceTypePick.value === "official-skills") {
+    await addAggregatorSource(configService, syncEngine, logger, "official-skills");
+    return;
+  }
+
+  await addAggregatorSource(configService, syncEngine, logger, "open-skills");
+}
+
+async function addAggregatorSource(
+  configService: ConfigService,
+  syncEngine: SyncEngine,
+  logger: Logger,
+  type: "official-skills" | "open-skills"
+): Promise<void> {
+  const existing = configService.getSources().some((s) => s.type === type);
+  if (existing) {
+    vscode.window.showInformationMessage("That discovery directory source is already configured.");
+    return;
+  }
+
+  await configService.addSource({ type, value: AGGREGATOR_DIRECTORY_VALUE });
+  logger.log(`Added ${type} discovery source`);
+  vscode.window.showInformationMessage(`Added ${sourceTypeLabel(type)}. Running sync...`);
+  const syncResult = await syncEngine.sync(true);
+  showSyncOutcome(syncResult, logger, "Initial sync");
 }
 
 interface RepoPickItem extends vscode.QuickPickItem {

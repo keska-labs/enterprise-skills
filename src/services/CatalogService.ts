@@ -131,5 +131,10 @@ function withSource(snapshot: CatalogSnapshot, source: SkillMetaSource): Catalog
 }
 
 export function hasIncompleteSkillPackages(metas: SkillMeta[]): boolean {
-  return metas.some((meta) => meta.skillType === "skill" && (meta.skillFiles?.length ?? 0) === 0);
+  return metas.some(
+    (meta) =>
+      !meta.isDiscoveryOnly &&
+      meta.skillType === "skill" &&
+      (meta.skillFiles?.length ?? 0) === 0
+  );
 }

@@ -47,7 +47,8 @@ export function skillMetaToSkillInfo(meta: SkillMeta): SkillInfo {
     fileCount: meta.skillFiles?.length,
     source: meta.source
       ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
-      : undefined
+      : undefined,
+    isDiscoveryOnly: meta.isDiscoveryOnly
   };
 }
 

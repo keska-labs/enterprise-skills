@@ -21,7 +21,13 @@ import {
 import { ServiceError } from "../services/ServiceError";
 import { getSkillManagerWebviewHtml } from "../utils/skillManagerWebviewHtml";
 import { SkillMeta } from "../types";
-import { compositeSkillKey } from "../utils/sources";
+import { compositeSkillKey, parseCompositeSkillKey } from "../utils/sources";
+import { installFromDiscoveryMeta } from "../services/discoveryInstall";
+import { SourceProviderRegistry } from "../services/SourceProviderRegistry";
+import {
+  DISCOVERY_SUMMARY_SKILL_NAME,
+  discoveryDirectorySkillInfos
+} from "../services/discoveryPrompt";
 
 export class SkillManagerPanel {
   private static currentPanel: SkillManagerPanel | undefined;
@@ -40,6 +46,7 @@ export class SkillManagerPanel {
     multiSourceService: MultiSourceCatalogService,
     workspaceAnalyzer: WorkspaceAnalyzer,
     llmSkillRecommender: LlmSkillRecommender,
+    providerRegistry: SourceProviderRegistry,
     configureSourceFn: typeof configureSource
   ): void {
     if (SkillManagerPanel.currentPanel) {
@@ -70,12 +77,15 @@ export class SkillManagerPanel {
       multiSourceService,
       workspaceAnalyzer,
       llmSkillRecommender,
+      providerRegistry,
       configureSourceFn
     );
   }
 
   private recommendedTabActive = false;
   private recommendationsCts?: vscode.CancellationTokenSource;
+  /** Latest LLM-emitted discovery-only metas (Recommended tab installs). */
+  private lastDiscoveryRecommendationMetas = new Map<string, SkillMeta>();
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -90,6 +100,7 @@ export class SkillManagerPanel {
     private readonly multiSourceService: MultiSourceCatalogService,
     private readonly workspaceAnalyzer: WorkspaceAnalyzer,
     private readonly llmSkillRecommender: LlmSkillRecommender,
+    private readonly providerRegistry: SourceProviderRegistry,
     private readonly configureSourceFn: typeof configureSource
   ) {
     this.panel = panel;
@@ -150,6 +161,42 @@ export class SkillManagerPanel {
         break;
       }
       case "toggleSkill": {
+        const toggled = parseCompositeSkillKey(message.compositeKey);
+        if (toggled?.name === DISCOVERY_SUMMARY_SKILL_NAME) {
+          await vscode.window.showInformationMessage(
+            "Discovery directories are listed for context only. Enable skills from the Recommended tab after running recommendations."
+          );
+          break;
+        }
+        if (message.optIn) {
+          const sources = this.configService.getResolvedSources();
+          try {
+            const merged = await this.multiSourceService.getMergedCatalog(sources);
+            let meta = merged.byCompositeKey.get(message.compositeKey);
+            if (!meta) {
+              meta = this.lastDiscoveryRecommendationMetas.get(message.compositeKey);
+            }
+            if (meta?.isDiscoveryOnly) {
+              await installFromDiscoveryMeta(
+                meta,
+                message.compositeKey,
+                this.configService,
+                this.syncEngine,
+                this.logger
+              );
+              const syncResult = this.syncEngine.getLastResult();
+              this.panel.webview.postMessage({ type: "syncComplete", payload: syncResult });
+              await this.postState();
+              break;
+            }
+          } catch (error) {
+            const text = error instanceof Error ? error.message : String(error);
+            this.logger.error("Discovery install failed", error);
+            this.panel.webview.postMessage({ type: "error", message: text });
+            await this.postState();
+            break;
+          }
+        }
         const current = new Set(this.configService.getOptedInSkills());
         if (message.optIn) {
           current.add(message.compositeKey);
@@ -190,9 +237,13 @@ export class SkillManagerPanel {
       case "getCatalog": {
         const sources = this.configService.getResolvedSources();
         const merged = await this.multiSourceService.getMergedCatalog(sources);
+        const skills = [
+          ...merged.metas.map(metaToSkillInfo),
+          ...discoveryDirectorySkillInfos(sources)
+        ];
         this.panel.webview.postMessage({
           type: "catalogResult",
-          skills: merged.metas.map(metaToSkillInfo)
+          skills
         });
         break;
       }
@@ -212,7 +263,9 @@ export class SkillManagerPanel {
         const prompt = await buildAskAgentPromptFromContext(
           this.workspaceAnalyzer,
           this.configService,
-          this.catalogStore
+          this.catalogStore,
+          this.providerRegistry,
+          this.logger
         );
         const result = await seedChatWithPrompt(prompt);
         const message = result.viaDeeplink
@@ -237,9 +290,13 @@ export class SkillManagerPanel {
         this.configService,
         this.catalogStore,
         this.llmSkillRecommender,
+        this.providerRegistry,
+        this.logger,
         { forceRefresh, token: this.recommendationsCts.token }
       );
-      this.panel.webview.postMessage({ type: "recommendationsResult", ...payload });
+      const { discoveryMetasByCompositeKey, ...rest } = payload;
+      this.lastDiscoveryRecommendationMetas = new Map(Object.entries(discoveryMetasByCompositeKey ?? {}));
+      this.panel.webview.postMessage({ type: "recommendationsResult", ...rest });
     } catch (error: unknown) {
       this.logger.error("Recommendations failed", error);
       this.panel.webview.postMessage({
@@ -328,6 +385,7 @@ function metaToSkillInfo(meta: SkillMeta): SkillInfo {
     fileCount: meta.skillFiles?.length,
     source: meta.source
       ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
-      : undefined
+      : undefined,
+    isDiscoveryOnly: meta.isDiscoveryOnly
   };
 }

@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import * as crypto from "crypto";
-import { ResolvedSource, SkillMeta, SkillTriggers, SkillType } from "../types";
+import { ResolvedSource, SkillMeta, SkillTriggers, SkillType, SourceType } from "../types";
 import { SkillCatalogStore } from "../services/SkillCatalogStore";
 
 const SKILL_SYNC_DIR = ".cursor/skill-sync";
@@ -12,14 +12,14 @@ export interface WorkspaceCatalogManifest {
   generatedAt: string;
   /** Legacy single-source key. Always set to the first configured source's key for back-compat. */
   sourceKey: string;
-  sources: Array<{ type: "github-repo" | "custom-registry"; value: string; label: string; sourceKey: string }>;
+  sources: Array<{ type: SourceType; value: string; label: string; sourceKey: string }>;
   skills: Array<{
     name: string;
     description?: string;
     category?: string;
     skillType: SkillType;
     triggers?: SkillTriggers;
-    source?: { label: string; type: "github-repo" | "custom-registry" };
+    source?: { label: string; type: SourceType };
   }>;
 }
 

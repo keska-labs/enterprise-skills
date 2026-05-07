@@ -22,8 +22,30 @@ function isMatchKind(v: unknown): v is RecommendationMatchKind {
   return typeof v === "string" && MATCH_KINDS.has(v as RecommendationMatchKind);
 }
 
+/** `owner/repo` — segments must be non-empty GitHub slug-ish tokens. */
+export function isValidGithubRepoRef(value: string): boolean {
+  const v = value.trim();
+  return /^[a-z0-9][a-z0-9_.-]*\/[a-z0-9_.-]+$/i.test(v);
+}
+
+function parseInstallSource(o: Record<string, unknown>): LlmRawRecommendation["installSource"] | undefined {
+  const raw = o.installSource;
+  if (!raw || typeof raw !== "object") {
+    return undefined;
+  }
+  const obj = raw as Record<string, unknown>;
+  const value = typeof obj.value === "string" ? obj.value.trim() : "";
+  if (!value || !isValidGithubRepoRef(value)) {
+    return undefined;
+  }
+  const skillPath =
+    typeof obj.skillPath === "string" && obj.skillPath.trim().length > 0 ? obj.skillPath.trim() : undefined;
+  return { value, skillPath };
+}
+
 /**
- * Parse model output into structured recommendations; drops unknown skill names.
+ * Parse model output into structured recommendations; drops unknown skill names
+ * unless a valid `installSource` is provided (discovery README listings).
  */
 export function parseLlmRankResponse(raw: string, validNames: Set<string>): LlmRankResult | undefined {
   let parsed: unknown;
@@ -49,9 +71,19 @@ export function parseLlmRankResponse(raw: string, validNames: Set<string>): LlmR
     }
     const o = item as Record<string, unknown>;
     const name = typeof o.name === "string" ? o.name.trim() : "";
-    if (!name || !validNames.has(name)) {
+    if (!name) {
       continue;
     }
+    const installSource = parseInstallSource(o);
+    const discoverySourceKey =
+      typeof o.discoverySourceKey === "string" && o.discoverySourceKey.trim().length > 0
+        ? o.discoverySourceKey.trim()
+        : undefined;
+
+    if (!installSource && !validNames.has(name)) {
+      continue;
+    }
+
     const score = typeof o.score === "number" && Number.isFinite(o.score) ? Math.round(o.score) : 0;
     const clamped = Math.max(0, Math.min(100, score));
     const reason = typeof o.reason === "string" ? o.reason.trim() : "";
@@ -61,12 +93,15 @@ export function parseLlmRankResponse(raw: string, validNames: Set<string>): LlmR
     if (!isMatchKind(o.matchKind)) {
       continue;
     }
-    recommendations.push({
+    const row: LlmRawRecommendation = {
       name,
       score: clamped,
       reason,
-      matchKind: o.matchKind
-    });
+      matchKind: o.matchKind,
+      installSource,
+      discoverySourceKey
+    };
+    recommendations.push(row);
   }
 
   if (recommendations.length === 0) {

@@ -99,4 +99,25 @@ describe("MultiSourceCatalogService", () => {
     expect(bResult?.snapshot?.metas[0].name).toBe("beta");
     expect(merged.byCompositeKey.size).toBe(1);
   });
+
+  it("skips discovery sources without calling getCatalog", async () => {
+    const gh = source("repo");
+    const agg: ResolvedSource = {
+      type: "official-skills",
+      value: "directory",
+      label: "officialskills-sh",
+      sourceKey: "official-skills:directory"
+    };
+    const catalogService = {
+      getCatalog: jest.fn().mockResolvedValue({ skillsRoot: "skills", metas: [meta("rule", "1", "repo")] })
+    } as unknown as CatalogService;
+    const svc = new MultiSourceCatalogService(catalogService, makeLogger());
+
+    const merged = await svc.getMergedCatalog([gh, agg]);
+
+    expect(catalogService.getCatalog).toHaveBeenCalledTimes(1);
+    expect(catalogService.getCatalog).toHaveBeenCalledWith(gh, expect.any(Object));
+    expect(merged.byCompositeKey.get("repo/rule")).toBeDefined();
+    expect(merged.byCompositeKey.has("officialskills-sh/docx")).toBe(false);
+  });
 });

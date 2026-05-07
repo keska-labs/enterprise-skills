@@ -1,5 +1,19 @@
+/** Legacy single-source migration keys only (`skillSync.sourceMode`). */
 export type SourceMode = "github-repo" | "custom-registry";
-export type SourceType = SourceMode;
+
+/** All configured upstream kinds in `skillSync.sources`. */
+export type SourceType =
+  | SourceMode
+  | "official-skills"
+  | "open-skills";
+
+/** Reference for installing a discovery-only catalog entry via the real GitHub sync path. */
+export interface SkillInstallSourceRef {
+  type: "github-repo";
+  value: string;
+  /** Repo-relative directory containing `SKILL.md` (e.g. `skills/docx`). */
+  skillPath?: string;
+}
 
 export interface RepoInfo {
   id: number;
@@ -11,7 +25,8 @@ export interface RepoInfo {
 /**
  * One configured upstream of skills. Persisted to settings as part of `skillSync.sources`.
  *
- * `value` is the repo `owner/repo` for `github-repo`, or the registry base URL for `custom-registry`.
+ * `value` is the repo `owner/repo` for `github-repo`, registry base URL for `custom-registry`,
+ * or the fixed sentinel `directory` for `official-skills` / `open-skills` singletons.
  * `label` is optional; when omitted, callers derive a stable label from `value` via `deriveSourceLabel`.
  */
 export interface SourceConfig {
@@ -57,6 +72,10 @@ export interface SkillMeta {
   triggers?: SkillTriggers;
   /** Optional source provenance — set by the multi-source orchestrator. */
   source?: SkillMetaSource;
+  /** Metadata-only aggregator entries — never synced directly; see `installSourceRef`. */
+  isDiscoveryOnly?: boolean;
+  /** Underlying GitHub repo (and optional package path) used when enabling this skill. */
+  installSourceRef?: SkillInstallSourceRef;
 }
 
 export interface SkillMetaSource {

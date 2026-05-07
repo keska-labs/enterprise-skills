@@ -8,6 +8,10 @@ export interface LlmRawRecommendation {
   score: number;
   reason: string;
   matchKind: RecommendationMatchKind;
+  /** When the skill is not in the prefetched catalog — backing GitHub repo to install from. */
+  installSource?: { value: string; skillPath?: string };
+  /** Must match a configured discovery source key when multiple directories exist (e.g. `official-skills:directory`). */
+  discoverySourceKey?: string;
 }
 
 export interface LlmRankResult {

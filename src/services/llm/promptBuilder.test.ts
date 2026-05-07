@@ -1,50 +1,56 @@
 import { buildRecommendationPrompt } from "./promptBuilder";
 import { WorkspaceProfile } from "../WorkspaceAnalyzer";
-import { SkillMeta } from "../../types";
+import { ResolvedSource, SkillMeta } from "../../types";
+import { DiscoveryPromptSection } from "../discoveryPrompt";
+
+function profile(): WorkspaceProfile {
+  return {
+    languages: new Set(["typescript"]),
+    dependencies: new Set(["react"]),
+    relativePaths: new Set(["src/index.ts"]),
+    installedExtensions: new Set(),
+    agentsMdText: null,
+    isMonorepo: false
+  };
+}
 
 describe("buildRecommendationPrompt", () => {
-  it("includes workspace signals and JSON-only instruction", () => {
-    const profile: WorkspaceProfile = {
-      languages: new Set(["typescript"]),
-      dependencies: new Set(["react"]),
-      relativePaths: new Set(["package.json"]),
-      installedExtensions: new Set(),
-      agentsMdText: "use graphql",
-      isMonorepo: false
+  it("embeds compact discovery descriptors (no README markdown blob)", () => {
+    const meta: SkillMeta = {
+      name: "rule-a",
+      shaOrVersion: "abc",
+      skillType: "cursor-rule"
     };
-    const metas: SkillMeta[] = [
+    const src: ResolvedSource = {
+      type: "open-skills",
+      value: "directory",
+      label: "skills-sh",
+      sourceKey: "open-skills:directory"
+    };
+    const sections: DiscoveryPromptSection[] = [
       {
-        name: "api-designer",
-        shaOrVersion: "abc",
-        skillType: "skill",
-        description: "REST APIs",
-        category: "Workflow",
-        triggers: { dependencies: ["express"] }
+        source: src,
+        repoUrl: "https://github.com/vercel-labs/skills",
+        structureHint: "Monorepo of skills under skills/<name>/SKILL.md"
       }
     ];
-    const prompt = buildRecommendationPrompt(profile, metas, []);
-    expect(prompt).toContain("typescript");
-    expect(prompt).toContain("react");
-    expect(prompt).toContain("api-designer");
-    expect(prompt).toContain("Respond with ONLY valid JSON");
-    expect(prompt).toContain("use graphql");
+    const prompt = buildRecommendationPrompt(profile(), [meta], [], sections);
+
+    expect(prompt).toContain("Discovery directories");
+    expect(prompt).toContain("https://github.com/vercel-labs/skills");
+    expect(prompt).toContain("Monorepo of skills under skills/<name>");
+    expect(prompt).toContain("open-skills:directory");
+    expect(prompt).toContain("installSource");
+
+    // Negative: prompt should not bloat with raw README markdown anymore
+    expect(prompt).not.toMatch(/```/);
+    expect(prompt.length).toBeLessThan(8000);
   });
 
-  it("excludes opted-in skills from catalog lines", () => {
-    const profile: WorkspaceProfile = {
-      languages: new Set(),
-      dependencies: new Set(),
-      relativePaths: new Set(),
-      installedExtensions: new Set(),
-      agentsMdText: null,
-      isMonorepo: false
-    };
-    const metas: SkillMeta[] = [
-      { name: "keep", shaOrVersion: "1", skillType: "skill" },
-      { name: "already-opted", shaOrVersion: "2", skillType: "skill" }
-    ];
-    const prompt = buildRecommendationPrompt(profile, metas, ["already-opted"]);
-    expect(prompt).toContain("keep");
-    expect(prompt).not.toContain("already-opted");
+  it("omits the discovery section entirely when no discovery sources are configured", () => {
+    const meta: SkillMeta = { name: "rule-a", shaOrVersion: "abc", skillType: "cursor-rule" };
+    const prompt = buildRecommendationPrompt(profile(), [meta], [], []);
+    expect(prompt).not.toContain("Discovery directories");
+    expect(prompt).not.toContain("installSource");
   });
 });

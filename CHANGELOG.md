@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.0
+
+- **Public skill directories:** add optional sources **Official Agent Skills** ([officialskills.sh](https://officialskills.sh)) and **Open Agent Skills** ([skills.sh](https://skills.sh)). Both are **discovery-only** and **no longer prefetch** thousands of rows into the merged catalog (GitHub + custom registry stay cached there). Instead, the LLM prompt embeds a **short descriptor** per source (repo URL + skill-layout hint) — **no README markdown is shipped** — and the model uses its own knowledge of those well-known public repos to suggest concrete skills. The response includes `installSource` (`owner/repo`, optional `skillPath`) plus `discoverySourceKey` when multiple directories are configured. **Heuristic-only** setups skip directory-derived picks unless an LLM path runs. The Skill Manager Catalog tab shows a non-installable summary row per directory; installs from listings use the Recommended flow. Singleton entries use `type: "official-skills" | "open-skills"` and `value: "directory"`. Persisted catalog cache **v6** drops legacy prefetched directory snapshots; LLM recommendation cache bumped to **v4**.
+
 ## 0.7.0
 
 - **`owner/repo` source labels:** GitHub sources default to the full `owner/repo` (e.g. `keska-labs/skills`) instead of just the repo segment, so two repos with the same name from different owners no longer collide. `/` is preserved in the workspace layout, producing nested folders like `.cursor/rules/keska-labs/skills/<name>.mdc` that read naturally.

@@ -17,6 +17,7 @@ import { MultiSourceCatalogService } from "../services/MultiSourceCatalogService
 import { CategoryData, SkillInfo, SkillManagerState, SkillSourceInfo, SkillSourceState } from "../../webview-ui/types/messages";
 import { ResolvedSource, SkillMeta } from "../types";
 import { compositeSkillKey, parseCompositeSkillKey } from "../utils/sources";
+import { appendDiscoveryDirectoryCategory } from "../services/discoveryPrompt";
 
 interface SkillManagerStateDependencies {
   configService: ConfigService;
@@ -61,8 +62,13 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
     }
   }
 
-  const hasRegistry = sources.some((s) => s.type === "custom-registry");
-  if (hasRegistry) {
+  const needsLiveMergedCatalog = sources.some(
+    (s) =>
+      s.type === "custom-registry" ||
+      s.type === "official-skills" ||
+      s.type === "open-skills"
+  );
+  if (needsLiveMergedCatalog) {
     try {
       const merged = await multiSourceService.getMergedCatalog(sources);
       mergedMetas = merged.metas;
@@ -84,6 +90,8 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
       }
     }
   }
+
+  appendDiscoveryDirectoryCategory(registryCategories, sources);
 
   for (const source of sources) {
     if (source.type === "github-repo") {
@@ -127,7 +135,8 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
       category: meta?.category ?? "Enabled",
       skillType: meta?.skillType ?? "cursor-rule",
       fileCount: meta?.skillFiles?.length,
-      source: sourceInfo
+      source: sourceInfo,
+      isDiscoveryOnly: meta?.isDiscoveryOnly
     };
   });
 
@@ -136,7 +145,7 @@ export async function buildSkillManagerState(deps: SkillManagerStateDependencies
 
   return {
     sources: sourceStates,
-    categories: hasRegistry ? registryCategories : categories.map((name) => ({ name, skills: [] })),
+    categories: needsLiveMergedCatalog ? registryCategories : categories.map((name) => ({ name, skills: [] })),
     enabledCategories,
     optedInSkills,
     lastSyncTime: syncEngine.getLastSyncTime()?.toISOString() ?? null,
@@ -265,7 +274,8 @@ function categorizeSkills(initialCategories: CategoryData[], metas: SkillMeta[])
       fileCount: meta.skillFiles?.length,
       source: meta.source
         ? { label: meta.source.label, type: meta.source.type, sourceKey: meta.source.sourceKey }
-        : undefined
+        : undefined,
+      isDiscoveryOnly: meta.isDiscoveryOnly
     });
   }
   return [...categoryMap.entries()].map(([name, categorySkills]) => ({ name, skills: categorySkills }));

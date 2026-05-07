@@ -1,12 +1,15 @@
 import {
+  AGGREGATOR_DIRECTORY_VALUE,
   buildSourceFromLegacy,
+  buildSourceKey,
   combinedSourcesKey,
   compositeSkillKey,
   deriveSourceLabel,
   isComposite,
   parseCompositeSkillKey,
   resolveSource,
-  sanitizeSourceLabel
+  sanitizeSourceLabel,
+  sourceTypeLabel
 } from "./sources";
 
 describe("deriveSourceLabel", () => {
@@ -44,6 +47,11 @@ describe("deriveSourceLabel", () => {
     expect(deriveSourceLabel({ type: "github-repo", value: "owner/repo", label: "Internal Skills" })).toBe(
       "internal-skills"
     );
+  });
+
+  it("uses stable sanitized labels for discovery sources (filesystem-safe)", () => {
+    expect(deriveSourceLabel({ type: "official-skills", value: AGGREGATOR_DIRECTORY_VALUE })).toBe("officialskills-sh");
+    expect(deriveSourceLabel({ type: "open-skills", value: AGGREGATOR_DIRECTORY_VALUE })).toBe("skills-sh");
   });
 });
 
@@ -90,6 +98,27 @@ describe("resolveSource", () => {
     const resolved = resolveSource({ type: "github-repo", value: "owner/repo" });
     expect(resolved.label).toBe("owner/repo");
     expect(resolved.sourceKey).toBe("github:owner/repo");
+  });
+
+  it("resolves singleton aggregator sources", () => {
+    const o = resolveSource({ type: "official-skills", value: AGGREGATOR_DIRECTORY_VALUE });
+    expect(o.sourceKey).toBe("official-skills:directory");
+    const p = resolveSource({ type: "open-skills", value: AGGREGATOR_DIRECTORY_VALUE });
+    expect(p.sourceKey).toBe("open-skills:directory");
+  });
+});
+
+describe("buildSourceKey", () => {
+  it("prefixes aggregator kinds", () => {
+    expect(buildSourceKey("official-skills", AGGREGATOR_DIRECTORY_VALUE)).toBe("official-skills:directory");
+    expect(buildSourceKey("open-skills", AGGREGATOR_DIRECTORY_VALUE)).toBe("open-skills:directory");
+  });
+});
+
+describe("sourceTypeLabel", () => {
+  it("labels discovery source kinds", () => {
+    expect(sourceTypeLabel("official-skills")).toBe("Official skills");
+    expect(sourceTypeLabel("open-skills")).toBe("Open skills");
   });
 });
 

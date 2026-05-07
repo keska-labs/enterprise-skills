@@ -6,6 +6,9 @@ import { LlmSkillRecommender } from "../services/LlmSkillRecommender";
 import { Recommendation } from "../../webview-ui/types/messages";
 import { buildAskAgentPrompt, SKILL_RECOMMENDER_CHAT_PROMPT } from "../utils/chatPrompt";
 import { ResolvedSource, SkillMeta } from "../types";
+import { SourceProviderRegistry } from "../services/SourceProviderRegistry";
+import { Logger } from "../utils/logger";
+import { loadDiscoveryPromptSections } from "../services/discoveryPrompt";
 
 interface MergedCachedCatalog {
   metas: SkillMeta[];
@@ -31,7 +34,10 @@ function loadCachedMergedCatalog(
         continue;
       }
       seen.add(key);
-      metas.push({ ...meta, source: { type: source.type, value: source.value, label: source.label, sourceKey: source.sourceKey } });
+      metas.push({
+        ...meta,
+        source: { type: source.type, value: source.value, label: source.label, sourceKey: source.sourceKey }
+      });
     }
   }
   return { metas, optedIn: configService.getOptedInSkills(), sources };
@@ -41,26 +47,50 @@ export async function buildRecommendationsPayload(
   workspaceAnalyzer: WorkspaceAnalyzer,
   configService: ConfigService,
   catalogStore: SkillCatalogStore,
-  llmRecommender: LlmSkillRecommender,
+  llmSkillRecommender: LlmSkillRecommender,
+  providerRegistry: SourceProviderRegistry,
+  logger: Logger,
   options?: { forceRefresh?: boolean; token?: vscode.CancellationToken }
 ): Promise<{
   recommendations: Recommendation[];
   catalogReady: boolean;
   source: "llm" | "heuristic";
   providerId?: string;
+  discoveryMetasByCompositeKey: Record<string, SkillMeta>;
 }> {
   const merged = loadCachedMergedCatalog(configService, catalogStore);
-  if (merged.metas.length === 0 || merged.sources.length === 0) {
-    return { recommendations: [], catalogReady: false, source: "heuristic" };
+  const discoveryConfigured = merged.sources.some(
+    (s) => s.type === "official-skills" || s.type === "open-skills"
+  );
+
+  if (merged.sources.length === 0) {
+    return {
+      recommendations: [],
+      catalogReady: false,
+      source: "heuristic",
+      discoveryMetasByCompositeKey: {}
+    };
   }
+
+  if (merged.metas.length === 0 && !discoveryConfigured) {
+    return {
+      recommendations: [],
+      catalogReady: false,
+      source: "heuristic",
+      discoveryMetasByCompositeKey: {}
+    };
+  }
+
+  const discoverySections = loadDiscoveryPromptSections(merged.sources, providerRegistry, logger);
 
   const profile = await workspaceAnalyzer.analyze();
   const token = options?.token ?? new vscode.CancellationTokenSource().token;
-  const llm = await llmRecommender.buildRecommendations({
+  const llm = await llmSkillRecommender.buildRecommendations({
     profile,
     metas: merged.metas,
     optedInSkills: merged.optedIn,
     sources: merged.sources,
+    discoverySections,
     forceRefresh: options?.forceRefresh ?? false,
     token
   });
@@ -69,7 +99,8 @@ export async function buildRecommendationsPayload(
     recommendations: llm.recommendations,
     catalogReady: true,
     source: llm.source,
-    providerId: llm.providerId
+    providerId: llm.providerId,
+    discoveryMetasByCompositeKey: llm.discoveryMetasByCompositeKey
   };
 }
 
@@ -80,12 +111,18 @@ export async function buildRecommendationsPayload(
 export async function buildAskAgentPromptFromContext(
   workspaceAnalyzer: WorkspaceAnalyzer,
   configService: ConfigService,
-  catalogStore: SkillCatalogStore
+  catalogStore: SkillCatalogStore,
+  providerRegistry: SourceProviderRegistry,
+  logger: Logger
 ): Promise<string> {
   const merged = loadCachedMergedCatalog(configService, catalogStore);
-  if (merged.metas.length === 0) {
+  const discoveryConfigured = merged.sources.some(
+    (s) => s.type === "official-skills" || s.type === "open-skills"
+  );
+  if (merged.metas.length === 0 && !discoveryConfigured) {
     return SKILL_RECOMMENDER_CHAT_PROMPT;
   }
   const profile = await workspaceAnalyzer.analyze();
-  return buildAskAgentPrompt(profile, merged.metas, merged.optedIn);
+  const discoverySections = loadDiscoveryPromptSections(merged.sources, providerRegistry, logger);
+  return buildAskAgentPrompt(profile, merged.metas, merged.optedIn, discoverySections);
 }

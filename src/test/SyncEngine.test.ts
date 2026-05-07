@@ -68,6 +68,42 @@ describe("SyncEngine", () => {
     expect(result.updated).toContain(compositeSkillKey("repo", "skill-a"));
   });
 
+  it("does not fetch content for discovery-only opted-in skills", async () => {
+    jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
+    jest.spyOn(fileUtils, "listExistingSkillPackages").mockResolvedValue([]);
+
+    const aggLabel = "officialskills-sh";
+    const aggSource: ResolvedSource = {
+      type: "official-skills",
+      value: "directory",
+      label: aggLabel,
+      sourceKey: "official-skills:directory"
+    };
+    const sources = [aggSource];
+    const auth = { getToken: jest.fn().mockResolvedValue("token") } as unknown as AuthService;
+    const config = {
+      getOptedInSkills: jest.fn().mockReturnValue([compositeSkillKey(aggLabel, "docx")]),
+      getResolvedSources: jest.fn().mockReturnValue(sources),
+      hasAnyConfiguredSource: jest.fn().mockReturnValue(true)
+    } as unknown as ConfigService;
+    const logger = { warn: jest.fn(), error: jest.fn() } as unknown as Logger;
+    const getContent = jest.fn();
+    const catalogService = { getContent } as unknown as CatalogService;
+    const discoveryMeta: SkillMeta = {
+      name: "docx",
+      shaOrVersion: "readme",
+      skillType: "skill",
+      isDiscoveryOnly: true,
+      installSourceRef: { type: "github-repo", value: "anthropics/skills", skillPath: "skills/docx" }
+    };
+    const multi = makeMultiSourceService([discoveryMeta], sources);
+
+    const engine = new SyncEngine(auth, config, logger, catalogService, multi);
+    const result = await engine.sync(true);
+    expect(getContent).not.toHaveBeenCalled();
+    expect(result.errors.some((e) => e.includes("discovery-only"))).toBe(true);
+  });
+
   it("returns skipped result when no session exists", async () => {
     jest.spyOn(fileUtils, "listExistingSkillFiles").mockResolvedValue([]);
     const auth = { getToken: jest.fn().mockResolvedValue(undefined) } as unknown as AuthService;

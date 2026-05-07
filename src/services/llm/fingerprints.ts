@@ -24,6 +24,8 @@ export function recommendationCacheCompositeKey(parts: {
   sourcesKey: string;
   profileFp: string;
   catalogFp: string;
+  /** Hash of embedded discovery markdown sections (README listings). */
+  discoveryFp: string;
   modelFamily: string;
   cursorSdkModel: string;
   openAiModel: string;
