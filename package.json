@@ -2,7 +2,7 @@
   "name": "agent-skill-sync",
   "displayName": "Agent Skill Sync",
   "description": "Curate agent skills from private GitHub repositories and custom registries—progressive browse, cached catalog, one-click sync into .cursor/rules.",
-  "version": "0.8.0",
+  "version": "0.7.0",
   "publisher": "KeskaLabsAB",
   "icon": "media/icon.png",
   "galleryBanner": {

@@ -1,6 +1,6 @@
 {
   "name": "agent-skill-sync-recommender",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Agent Skill Sync — AI-powered skill recommendations for your workspace (chat subagent). Install skills via Skill Sync: Manage AI Skills.",
   "repository": "https://github.com/keska-labs/enterprise-skills",
   "license": "MIT",
