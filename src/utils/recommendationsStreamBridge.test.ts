@@ -12,10 +12,10 @@ describe("createRecommendationsStreamBridge", () => {
 
   it("coalesces text deltas and flushes on timer", () => {
     const posted: ExtensionMessage[] = [];
-    const { sink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
+    const { eventSink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
 
-    sink({ type: "text", providerId: "openai", delta: "a" });
-    sink({ type: "text", providerId: "openai", delta: "b" });
+    eventSink({ type: "text", providerId: "openai", delta: "a" });
+    eventSink({ type: "text", providerId: "openai", delta: "b" });
     expect(posted.length).toBe(0);
 
     jest.advanceTimersByTime(50);
@@ -30,9 +30,9 @@ describe("createRecommendationsStreamBridge", () => {
 
   it("flushes text immediately on newline", () => {
     const posted: ExtensionMessage[] = [];
-    const { sink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
+    const { eventSink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
 
-    sink({ type: "text", providerId: "openai", delta: "line\n" });
+    eventSink({ type: "text", providerId: "openai", delta: "line\n" });
     expect(posted.length).toBe(1);
     expect(posted[0]).toEqual({
       type: "recommendationsStreamEvent",
@@ -44,11 +44,11 @@ describe("createRecommendationsStreamBridge", () => {
 
   it("posts thinking events immediately without waiting for throttle", () => {
     const posted: ExtensionMessage[] = [];
-    const { sink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
+    const { eventSink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg), 50);
 
-    sink({ type: "thinking", providerId: "openai", delta: "a" });
+    eventSink({ type: "thinking", providerId: "openai", delta: "a" });
     expect(posted.length).toBe(1);
-    sink({ type: "thinking", providerId: "openai", delta: "b" });
+    eventSink({ type: "thinking", providerId: "openai", delta: "b" });
     expect(posted.length).toBe(2);
 
     flush();
@@ -56,9 +56,9 @@ describe("createRecommendationsStreamBridge", () => {
 
   it("posts non-text events immediately", () => {
     const posted: ExtensionMessage[] = [];
-    const { sink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg));
+    const { eventSink, flush } = createRecommendationsStreamBridge((msg) => posted.push(msg));
 
-    sink({ type: "status", providerId: "vscode-lm", message: "Trying…" });
+    eventSink({ type: "status", providerId: "vscode-lm", message: "Trying…" });
     expect(posted.length).toBe(1);
     flush();
   });

@@ -299,7 +299,7 @@ export class SkillManagerPanel {
         {
           forceRefresh,
           token: this.recommendationsCts.token,
-          onStreamEvent: bridge.sink
+          onStreamEvent: bridge.eventSink
         }
       );
       bridge.flush();

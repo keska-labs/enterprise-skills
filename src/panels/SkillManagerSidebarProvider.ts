@@ -255,7 +255,7 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         {
           forceRefresh,
           token: this.recommendationsCts.token,
-          onStreamEvent: bridge.sink
+          onStreamEvent: bridge.eventSink
         }
       );
       bridge.flush();

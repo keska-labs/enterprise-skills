@@ -7,7 +7,7 @@ import type { LlmStreamEvent, LlmStreamSink } from "../../webview-ui/types/llmSt
 export function createRecommendationsStreamBridge(
   post: (msg: ExtensionMessage) => void,
   flushMs = 50
-): { sink: LlmStreamSink; flush: () => void } {
+): { eventSink: LlmStreamSink; flush: () => void } {
   let pendingText: { providerId: string; delta: string } | null = null;
   let pendingThinking: { providerId: string; delta: string } | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
@@ -52,7 +52,7 @@ export function createRecommendationsStreamBridge(
     }, flushMs);
   };
 
-  const sink = (event: LlmStreamEvent): void => {
+  const eventSink = (event: LlmStreamEvent): void => {
     if (event.type === "text") {
       if (!pendingText || pendingText.providerId !== event.providerId) {
         flushText();
@@ -80,5 +80,5 @@ export function createRecommendationsStreamBridge(
     post({ type: "recommendationsStreamEvent", event });
   };
 
-  return { sink, flush: flushAll };
+  return { eventSink, flush: flushAll };
 }
