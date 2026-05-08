@@ -1,3 +1,5 @@
+import type { LlmStreamEvent } from "./llmStreamEvents";
+
 /**
  * `cursor-rule` — a single `.mdc` file synced to `.cursor/rules/<label>/`.
  * `skill`       — a directory package synced to `.cursor/skills/<label>/`.
@@ -121,4 +123,13 @@ export type ExtensionMessage =
     catalogReady: boolean;
     source: "llm" | "heuristic";
     providerId?: string;
+  }
+  | { type: "recommendationsStreamStart"; providerId?: string }
+  | { type: "recommendationsStreamEvent"; event: LlmStreamEvent }
+  | {
+    type: "recommendationsStreamEnd";
+    providerId?: string;
+    outcome: "ok" | "error" | "cancelled";
   };
+
+export type { LlmStreamEvent } from "./llmStreamEvents";

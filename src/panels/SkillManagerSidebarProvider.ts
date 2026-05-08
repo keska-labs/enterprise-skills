@@ -28,6 +28,7 @@ import {
   DISCOVERY_SUMMARY_SKILL_NAME,
   discoveryDirectorySkillInfos
 } from "../services/discoveryPrompt";
+import { createRecommendationsStreamBridge } from "../utils/recommendationsStreamBridge";
 
 export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "skillSync.sidebarManager";
@@ -240,6 +241,9 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
     this.recommendationsCts?.dispose();
     this.recommendationsCts = new vscode.CancellationTokenSource();
 
+    this.view?.webview.postMessage({ type: "recommendationsStreamStart" });
+    const bridge = createRecommendationsStreamBridge((msg) => this.view?.webview.postMessage(msg));
+
     try {
       const payload = await buildRecommendationsPayload(
         this.workspaceAnalyzer,
@@ -248,18 +252,35 @@ export class SkillManagerSidebarProvider implements vscode.WebviewViewProvider {
         this.llmSkillRecommender,
         this.providerRegistry,
         this.logger,
-        { forceRefresh, token: this.recommendationsCts.token }
+        {
+          forceRefresh,
+          token: this.recommendationsCts.token,
+          onStreamEvent: bridge.eventSink
+        }
       );
+      bridge.flush();
       const { discoveryMetasByCompositeKey, ...rest } = payload;
       this.lastDiscoveryRecommendationMetas = new Map(Object.entries(discoveryMetasByCompositeKey ?? {}));
       this.view?.webview.postMessage({ type: "recommendationsResult", ...rest });
+      bridge.flush();
+      const cancelled = this.recommendationsCts.token.isCancellationRequested;
+      this.view?.webview.postMessage({
+        type: "recommendationsStreamEnd",
+        outcome: cancelled ? "cancelled" : "ok",
+        providerId: rest.providerId
+      });
     } catch (error: unknown) {
+      bridge.flush();
       this.logger.error("Recommendations failed", error);
       this.view?.webview.postMessage({
         type: "recommendationsResult",
         recommendations: [],
         catalogReady: false,
         source: "heuristic"
+      });
+      this.view?.webview.postMessage({
+        type: "recommendationsStreamEnd",
+        outcome: "error"
       });
     }
   }

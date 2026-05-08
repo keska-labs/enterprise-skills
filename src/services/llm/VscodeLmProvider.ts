@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import type { LlmStreamSink } from "./streamEvents";
 
 type LanguageModelChatResponse = {
   text: AsyncIterable<string>;
@@ -21,7 +22,12 @@ type VscodeWithLm = typeof vscode & {
   };
 };
 
-async function streamToText(response: LanguageModelChatResponse, token: vscode.CancellationToken): Promise<string> {
+async function streamToText(
+  response: LanguageModelChatResponse,
+  token: vscode.CancellationToken,
+  providerId: string,
+  stream?: LlmStreamSink
+): Promise<string> {
   let out = "";
   try {
     for await (const fragment of response.text) {
@@ -29,6 +35,9 @@ async function streamToText(response: LanguageModelChatResponse, token: vscode.C
         break;
       }
       out += fragment;
+      if (fragment) {
+        stream?.({ type: "text", providerId, delta: fragment });
+      }
     }
   } catch {
     return out;
@@ -41,7 +50,11 @@ export class VscodeLmProvider {
 
   public constructor(private readonly modelFamily: string) {}
 
-  public async complete(prompt: string, token: vscode.CancellationToken): Promise<string | undefined> {
+  public async complete(
+    prompt: string,
+    token: vscode.CancellationToken,
+    stream?: LlmStreamSink
+  ): Promise<string | undefined> {
     const v = vscode as VscodeWithLm;
     const lm = v.lm;
     if (!lm?.selectChatModels) {
@@ -64,7 +77,7 @@ export class VscodeLmProvider {
 
     try {
       const response = await models[0].sendRequest(messages as unknown[], {}, token);
-      const text = await streamToText(response, token);
+      const text = await streamToText(response, token, this.id, stream);
       return text.trim() || undefined;
     } catch {
       return undefined;
